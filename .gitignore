@@ -1,0 +1,30 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Sensitive session states and cookies (CRITICAL: Do NOT commit credentials)
+state.json
+*.flag
+*.session
+
+# Logs and Screenshots
+*.log
+*.png
+*.jpg
+*.jpeg
+screenshots/
+
+# Environment variables
+.env
+.env.local
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE files
+.vscode/
+.idea/
+.DS_Store
