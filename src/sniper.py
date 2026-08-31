@@ -261,6 +261,15 @@ class Sniper:
                 await page.screenshot(path=err_img)
                 return False
             finally:
-                self.notifier.log("👋 保持瀏覽器 8 秒後自動關閉...")
-                await asyncio.sleep(8)
-                await browser.close()
+                if dry_run:
+                    self.notifier.log("👋 [模擬推演] 保持瀏覽器 8 秒後自動關閉...")
+                    await asyncio.sleep(8)
+                    await browser.close()
+                else:
+                    self.notifier.log("🖥️ [正式搶票] 瀏覽器視窗已保留在畫面上供您即時檢視！")
+                    self.notifier.log("👉 您可以直接在該視窗操作。按 Enter 鍵或關閉視窗即可結束程式...")
+                    try:
+                        await asyncio.get_event_loop().run_in_executor(None, input)
+                    except Exception:
+                        await asyncio.sleep(3600)
+                    await browser.close()
