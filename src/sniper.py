@@ -81,7 +81,7 @@ class Sniper:
         self.notifier.log("==========================================")
         self.notifier.log(f"🎯 啟動搶票核心 | 目標日期: {self.target_date} (日: {self.target_day_num})")
         self.notifier.log(f"📋 首選目標: 網球場 A {self.primary_slots}")
-        self.notifier.log(f"📋 備選目標: 網球場 B 20:00 及 14:00~19:00 撿漏時段")
+        self.notifier.log(f"📋 備選目標: {self.min_hour}:00~{self.max_hour}:00 零星釋出時段 (網球場 A/B)")
         self.notifier.log("==========================================")
 
         # 1. 毫秒級時間校準
@@ -184,25 +184,22 @@ class Sniper:
                         self.notifier.log(f"🏆 【大獲全勝】首選時段全數預約成功！時段: {success_slots}")
                         break
 
-                    # 若前 3 次刷新均未搶到 A 場，嘗試切換到 B 場搶 20:00 或其他時段
+                    # 若前幾輪首選時段 (17:00, 18:00) 未全數獲取，啟動 14:00~17:00 零星時段撿漏
                     if attempt >= 3 and len(success_slots) < 2:
-                        self.notifier.log("⚡ 嘗試切換至網球場 B 標籤...")
-                        await tab_links.nth(1).click(force=True)
-                        await page.wait_for_timeout(300)
-                        
-                        # 嘗試 B 場 20:00 (已知 09/01 開放)
-                        if "20:00" not in success_slots:
-                            ok, msg = await self.try_book_slot(page, "B", "20:00", self.target_day_num)
-                            if ok:
-                                self.notifier.log(f"🎉 【B 場命中】{msg}")
-                                success_slots.append("20:00")
+                        for idx, court in enumerate(["A", "B"]):
+                            if len(success_slots) >= 2:
+                                break
+                            
+                            # 若要掃描 B 場，先切換分頁標籤
+                            if court == "B":
+                                await tab_links.nth(1).click(force=True)
+                                await page.wait_for_timeout(250)
+                            else:
+                                await tab_links.first.click(force=True)
+                                await page.wait_for_timeout(150)
 
-                    # 若依然需要時段且已嘗試多輪，啟動全局撿漏
-                    if attempt >= 6 and len(success_slots) < 2:
-                        self.notifier.log("⚡ 啟動全日曆撿漏掃描...")
-                        for court in ["A", "B"]:
                             sec_id = "#js-v1" if court == "A" else "#js-v2"
-                            available = await page.evaluate(f"""
+                            available_titles = await page.evaluate(f"""
                                 (selector) => {{
                                     const res = [];
                                     const sec = document.querySelector(selector);
@@ -210,7 +207,7 @@ class Sniper:
                                         sec.querySelectorAll('.timeline__identity').forEach(el => {{
                                             const title = el.getAttribute('title') || '';
                                             const txt = el.innerText || '';
-                                            if (!txt.includes('已預約') && title.includes('~')) {{
+                                            if (!txt.includes('已預約') && !txt.includes('開放') && title.includes('~')) {{
                                                 res.push(title);
                                             }}
                                         }});
@@ -218,17 +215,29 @@ class Sniper:
                                     return res;
                                 }}
                             """, sec_id)
-                            
-                            for t in available:
+
+                            for t in available_titles:
                                 prefix = t.split('~')[0].strip()
-                                ok, msg = await self.try_book_slot(page, court, prefix, self.target_day_num)
-                                if ok:
-                                    self.notifier.log(f"🎉 【撿漏成功】{court}場 {prefix} - {msg}")
-                                    success_slots.append(f"{court}:{prefix}")
-                                    if len(success_slots) >= 2:
-                                        break
-                            if len(success_slots) >= 2:
-                                break
+                                # 解析時段起始小時 (如 "14:00" -> 14)
+                                try:
+                                    slot_hour = int(prefix.split(':')[0])
+                                except ValueError:
+                                    continue
+
+                                # 嚴格限制：僅考慮 14 <= hour < 17 (14:00~17:00)
+                                if self.min_hour <= slot_hour < self.max_hour:
+                                    slot_key = f"{court}:{prefix}"
+                                    if slot_key in success_slots or prefix in success_slots:
+                                        continue
+                                    ok, msg = await self.try_book_slot(page, court, prefix, self.target_day_num)
+                                    if ok:
+                                        self.notifier.log(f"🎉 【撿漏成功】{court}場 {prefix} - {msg}")
+                                        success_slots.append(slot_key)
+                                        if len(success_slots) >= 2:
+                                            break
+
+                    if len(success_slots) >= 2:
+                        break
 
                     if len(success_slots) >= 2:
                         break

@@ -9,9 +9,9 @@ target:
   court_order:                     # 場地優先級順序
     - "A"
     - "B"
-  fallback_time_range:             # B 計劃撿漏範圍 (開始小時 14 <= h <= 19)
+  fallback_time_range:             # 撿漏範圍 (14:00 <= 開始時間 < 17:00)
     min_hour: 14
-    max_hour: 19
+    max_hour: 17
 
 system:
   url: "https://gym.dga.sinica.edu.tw/reservation.html"
