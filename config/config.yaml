@@ -3,12 +3,11 @@
 target:
   date: "09/05"                    # 目標日期 (MM/DD)
   day_num: "05"                    # 日期數字 (日曆比對用)
-  primary_slots:                   # 首選目標時段 (A 計劃)
-    - "17:00"
-    - "18:00"
+  primary_slots:                   # 首選目標時段 (今晚 09/02 開放 19:00)
+    - "19:00"
   court_order:                     # 場地優先級順序
-    - "A"
     - "B"
+    - "A"
   fallback_time_range:             # 撿漏範圍 (14:00 <= 開始時間 < 17:00)
     min_hour: 14
     max_hour: 17
