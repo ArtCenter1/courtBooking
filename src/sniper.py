@@ -52,10 +52,10 @@ class Sniper:
             text = (await target_el.inner_text()).strip()
             class_name = await target_el.get_attribute('class') or ''
             
-            # 若標記為已預約或尚未開放 (09/01開放 / no-open)，代表該時段目前不可點，立即跳過以加速下一輪刷新
-            if "已預約" in text:
-                return False, f"[{court_name}場] 時段已被預約 ({slot_prefix})"
-            if "開放" in text or "no-open" in class_name:
+            # 若標記為已預約、休館，或明確標記為未來日期開放 (例如 09/02開放)，跳過以加速下一輪刷新
+            if "已預約" in text or "休館" in text or "停用" in text:
+                return False, f"[{court_name}場] 時段已被預約/無法預約 ({slot_prefix})"
+            if "開放" in text:
                 return False, f"[{court_name}場] 時段尚未釋出開放 ({slot_prefix})"
 
             # 點擊時段觸發預約對話框
