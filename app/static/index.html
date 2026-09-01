@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>中研院網球場智慧預約 SaaS 平台</title>
+  <!-- Google Fonts: Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+  <!-- 頂部導航 -->
+  <header class="navbar">
+    <div class="brand">
+      <span class="brand-icon">🎾</span>
+      <span>Sinica Court Sniper</span>
+    </div>
+    <div class="user-nav">
+      <div id="cred-status-badge" class="badge badge-warning" style="cursor:pointer;" onclick="openCredModal()">
+        🟡 尚未設定中研院帳密
+      </div>
+      <button id="user-profile-btn" class="btn btn-outline btn-sm">👤 訪客</button>
+    </div>
+  </header>
+
+  <!-- 主內容區 -->
+  <main class="container">
+    <div class="grid-layout">
+      
+      <!-- 左側：搶票任務設定區 (極簡卡片 + 進階摺疊) -->
+      <section>
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">📅 1. 選擇目標預約日期</h2>
+          </div>
+          <!-- 日曆 Chips -->
+          <div id="date-grid" class="date-grid"></div>
+
+          <div class="card-header" style="margin-top: 1.5rem;">
+            <h2 class="card-title">⏰ 2. 選擇志願時段 (依序點擊排定首選/次選)</h2>
+          </div>
+          <!-- 時段按鈕 (14:00 ~ 21:00) -->
+          <div id="slot-grid" class="slot-grid">
+            <button class="slot-btn" data-time="14:00">14:00~15:00</button>
+            <button class="slot-btn" data-time="15:00">15:00~16:00</button>
+            <button class="slot-btn" data-time="16:00">16:00~17:00</button>
+            <button class="slot-btn" data-time="17:00">17:00~18:00</button>
+            <button class="slot-btn" data-time="18:00">18:00~19:00</button>
+            <button class="slot-btn" data-time="19:00">19:00~20:00</button>
+            <button class="slot-btn" data-time="20:00">20:00~21:00</button>
+            <button class="slot-btn" data-time="21:00">21:00~22:00</button>
+          </div>
+
+          <!-- 進階精密微調摺疊面板 -->
+          <div class="accordion">
+            <div id="accordion-header" class="accordion-header">
+              <span>⚙️ 進階精密微調 (場地優先序、撿漏範圍、時間補償、推播)</span>
+              <span>▼</span>
+            </div>
+            <div id="accordion-body" class="accordion-body">
+              <div class="form-group">
+                <label class="form-label">首選場地順序</label>
+                <select id="court-priority-select" class="form-select">
+                  <option value="A">網球場 A 優先 (若搶滿轉向 B 場)</option>
+                  <option value="B">網球場 B 優先 (若搶滿轉向 A 場)</option>
+                </select>
+              </div>
+
+              <div class="form-group" style="display:flex; align-items:center; gap:0.5rem; margin-top:0.75rem;">
+                <input type="checkbox" id="fallback-check" checked style="width:18px; height:18px;">
+                <label for="fallback-check" class="form-label" style="margin-bottom:0; cursor:pointer;">
+                  啟用 14:00~17:00 零星時段自動撿漏備選
+                </label>
+              </div>
+
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.75rem; margin-top:0.75rem;">
+                <div class="form-group">
+                  <label class="form-label">放票後重試次數</label>
+                  <input type="number" id="refresh-attempts-input" class="form-input" value="40">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">重試間隔 (ms)</label>
+                  <input type="number" id="refresh-interval-input" class="form-input" value="300">
+                </div>
+              </div>
+
+              <div class="form-group" style="margin-top:0.75rem;">
+                <label class="form-label">Telegram Bot Token (選填)</label>
+                <input type="text" id="telegram-token-input" class="form-input" placeholder="可接收成功推播截圖">
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Telegram Chat ID (選填)</label>
+                <input type="text" id="telegram-chatid-input" class="form-input" placeholder="您的 Telegram Chat ID">
+              </div>
+            </div>
+          </div>
+
+          <button id="submit-task-btn" class="btn btn-primary btn-block">
+            🚀 建立並啟動 00:00 自動搶票任務
+          </button>
+        </div>
+      </section>
+
+      <!-- 右側：排程任務狀態與紀錄 -->
+      <section>
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">📋 搶票排程與監控中心</h2>
+            <button class="btn btn-outline btn-sm" onclick="openCredModal()">🔑 中研院帳密</button>
+          </div>
+          
+          <div id="task-list">
+            <div style="text-align: center; padding: 2rem; color: var(--text-dim);">
+              載入任務中...
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- 中研院憑證彈窗 -->
+  <div id="cred-modal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="card-header">
+        <h3 class="card-title">🔒 中研院憑證設定 (AES-256 加密儲存)</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeCredModal()">✕</button>
+      </div>
+      <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
+        憑證將加密保存在伺服器安全金庫，系統會在搶票前 10 分鐘自動模擬登入換發 Session，無須手動維護。
+      </p>
+      <div class="form-group">
+        <label class="form-label">中研院帳號 / 身分證字號</label>
+        <input type="text" id="sinica-acc-input" class="form-input" placeholder="例如 A123456789">
+      </div>
+      <div class="form-group">
+        <label class="form-label">中研院登入密碼</label>
+        <input type="password" id="sinica-pwd-input" class="form-input" placeholder="您的中研院密碼">
+      </div>
+      <button id="save-cred-btn" class="btn btn-primary btn-block" style="margin-top:1rem;">
+        🔒 加密儲存並驗證登入
+      </button>
+    </div>
+  </div>
+
+  <!-- 登入 / 註冊彈窗 -->
+  <div id="auth-modal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="card-header">
+        <h3 class="card-title">🎾 歡迎使用 Sinica Court Sniper</h3>
+      </div>
+      <div class="form-group">
+        <label class="form-label">電子郵件 Email</label>
+        <input type="email" id="auth-email-input" class="form-input" placeholder="name@example.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">密碼</label>
+        <input type="password" id="auth-pwd-input" class="form-input" placeholder="••••••••">
+      </div>
+      <div class="form-group" style="display:flex; align-items:center; gap:0.5rem; margin-top:0.5rem;">
+        <input type="checkbox" id="auth-is-register" style="width:16px; height:16px;">
+        <label for="auth-is-register" class="form-label" style="margin-bottom:0; cursor:pointer;">
+          我是新使用者（勾選以註冊帳號）
+        </label>
+      </div>
+      <button id="auth-submit-btn" class="btn btn-primary btn-block" style="margin-top:1rem;">
+        進入系統
+      </button>
+    </div>
+  </div>
+
+  <!-- 模擬推演回饋彈窗 -->
+  <div id="dry-run-modal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="card-header">
+        <h3 class="card-title">🧪 模擬推演 (Dry-Run) 結果</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeDryRunModal()">✕</button>
+      </div>
+      <pre id="dry-run-log" style="background:rgba(0,0,0,0.5); padding:1rem; border-radius:var(--radius-sm); font-size:0.85rem; color:#60a5fa; white-space:pre-wrap; max-height:240px; overflow-y:auto;"></pre>
+      <button class="btn btn-primary btn-block" style="margin-top:1rem;" onclick="closeDryRunModal()">
+        關閉
+      </button>
+    </div>
+  </div>
+
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

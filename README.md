@@ -1,7 +1,28 @@
 # 中研院體育館網球場預約自動化系統 (方案 A 重構版)
 
 ## 專案說明
-這是一套專為中研院綜合體育館網球場（`https://gym.dga.sinica.edu.tw/reservation.html`）設計的高可靠、毫秒級極速預約系統。支援院外人士提前 5 天（00:00:00 開放）之搶票任務，具備毫秒級 NTP/HTTP 校時、Session 預檢預熱、雙場地連續時段鎖定與智能 B 計劃撿漏機制。
+這是一套專為中研院綜合體育館網球場（`https://gym.dga.sinica.edu.tw/reservation.html`）設計的**智慧自動預約 SaaS 平台與毫秒級極速搶票系統**。
+支援院外人士提前 5 天（00:00:00 開放）之搶票任務，提供**現代化 Web 響應式控制面板（手機 PWA / 桌面電腦）**，具備 AES-256 憑證安全金庫、多租戶志願序排程與防衝突分流避讓、毫秒級 NTP/HTTP 校時、自動 23:50 預熱 Session 與即時結果截圖存證。
+
+---
+
+## 🌟 啟動方式 (SaaS 網頁版 & CLI 命令列)
+
+### 方式 A：啟動 Web SaaS 視覺化平台 (推薦)
+```cmd
+python run_server.py
+```
+- 開啟瀏覽器訪問：`http://127.0.0.1:8000`
+- 支援手機或電腦瀏覽器操作、卡片式快速選擇日期與時段、志願序設定、進階精密微調與一鍵推演 (Dry-Run)。
+- 後端 API 文件：`http://127.0.0.1:8000/docs`
+
+### 方式 B：單機 CLI 快速執行
+```cmd
+python cli.py check                    # 檢查 Session 與時鐘校準
+python cli.py scan --court A --day 05  # 掃描指定日期空位狀態
+python cli.py dry-run --seconds 5      # 模擬推演 5 秒倒數搶票
+python cli.py snipe                   # 正式 00:00 搶票守候任務
+```
 
 ---
 
@@ -9,17 +30,22 @@
 
 ```
 courtBooking/
-├── config/
-│   └── config.yaml          # 集中設定檔 (目標日期/時段、場地優先級、檔案路徑等)
-├── src/
-│   ├── time_sync.py        # 毫秒級時間同步模組 (SNTP + HTTP Date 雙重校準)
-│   ├── auth.py             # Session 健康度預檢與狀態管理
-│   ├── scanner.py          # 日曆與時段解析 (精準支援「09/01開放」標籤辨識)
-│   ├── sniper.py           # 00:00 毫秒級極速搶票核心引擎
-│   └── notifier.py         # 檔案 Log、控制台及 Telegram 通知模組
-├── tests/
-│   └── test_simulation.py  # 全鏈路實戰推演模擬腳本
-├── cli.py                  # 統一命令列入口 (check/scan/dry-run/snipe)
+├── app/                     # [SaaS 雲端層] FastAPI + 響應式 Web 前端
+│   ├── main.py              # FastAPI 進入點與靜態資源託管
+│   ├── config.py            # SaaS 系統設定與安全金庫金鑰
+│   ├── database.py          # 資料庫連線 (SQLModel / SQLite)
+│   ├── models/              # User, SinicaCredential, BookingTask 資料模型
+│   ├── api/                 # 認證、憑證、任務管理與雷達掃描 API
+│   ├── services/            # AES-256 加密、JWT、背景排程與搶票 Worker 調度
+│   └── static/              # 現代化深色響應式前端 SPA (HTML / CSS / JS)
+├── src/                     # [搶票引擎核心]
+│   ├── time_sync.py         # 毫秒級時間同步模組 (SNTP + HTTP Date)
+│   ├── auth.py              # Session 健康度預檢與狀態管理
+│   ├── scanner.py           # 日曆與時段解析雷達
+│   ├── sniper.py            # 00:00 毫秒級極速搶票核心引擎 (已修復放票判定)
+│   └── notifier.py          # 檔案 Log、控制台及 Telegram 通知模組
+├── run_server.py            # SaaS Web 服務一鍵啟動腳本
+├── cli.py                   # 單機 CLI 統一命令列入口
 └── README.md
 ```
 

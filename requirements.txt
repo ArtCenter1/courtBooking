@@ -1,2 +1,15 @@
 playwright>=1.40.0
-pyyaml>=6.0
+pyyaml>=6.0.0
+requests>=2.31.0
+ntplib>=0.4.0
+fastapi>=0.110.0
+uvicorn>=0.28.0
+sqlmodel>=0.0.16
+cryptography>=42.0.0
+python-jose>=3.3.0
+passlib>=1.7.4
+bcrypt>=4.0.0
+apscheduler>=3.10.0
+python-multipart>=0.0.9
+email-validator>=2.0.0
+pytest>=8.0.0
