@@ -5,6 +5,11 @@ __pycache__/
 
 # Sensitive session states and cookies (CRITICAL: Do NOT commit credentials)
 state.json
+state*.json
+data/
+*.db
+*.sqlite
+*.sqlite3
 *.flag
 *.session
 
