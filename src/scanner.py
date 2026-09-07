@@ -171,7 +171,12 @@ class CalendarScanner:
 
                 scan_result = await page.evaluate(r"""
                     () => {
-                        const results = { A: [], B: [] };
+                        const results = { A: [], B: [], monthTitle: '' };
+                        const monthEl = document.querySelector('.calendar__month');
+                        if (monthEl) {
+                            results.monthTitle = monthEl.innerText.trim();
+                        }
+                        
                         ['A', 'B'].forEach(c => {
                             const secId = c === 'A' ? '#js-v1' : '#js-v2';
                             const sec = document.querySelector(secId) || document;
@@ -181,11 +186,13 @@ class CalendarScanner:
                                 const headerText = day.innerText.split('\n')[0] || '';
                                 const dayTextEl = day.querySelector('.calendar__day-text');
                                 const dayNum = dayTextEl ? dayTextEl.innerText.trim() : '';
+                                const isToday = !!(dayTextEl && dayTextEl.classList.contains('calendar__selected-date'));
                                 
                                 const slotItems = [];
                                 day.querySelectorAll('.timeline__identity').forEach(slot => {
                                     const title = slot.getAttribute('title') || '';
                                     const text = slot.innerText ? slot.innerText.trim() : '';
+                                    const className = slot.className || '';
                                     
                                     let startTime = "";
                                     const timeMatch = title.match(/(\d{2}):\d{2}~/);
@@ -197,12 +204,13 @@ class CalendarScanner:
                                     
                                     const isBooked = text.includes('已預約');
                                     const isOpenPending = text.includes('開放');
-                                    const isAvailable = (!isBooked && !isOpenPending && (text.includes('~') || startTime !== ""));
+                                    const isAvailable = (!isBooked && !isOpenPending && !text.includes('休館') && (text.includes('~') || startTime !== ""));
                                     
                                     slotItems.push({
                                         title: title,
                                         text: text,
                                         startTime: startTime,
+                                        className: className,
                                         isBooked: isBooked,
                                         isOpenPending: isOpenPending,
                                         isAvailable: isAvailable
@@ -212,6 +220,7 @@ class CalendarScanner:
                                 results[c].push({
                                     dayNum: dayNum,
                                     headerText: headerText,
+                                    isToday: isToday,
                                     slots: slotItems
                                 });
                             });

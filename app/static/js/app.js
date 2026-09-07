@@ -40,10 +40,27 @@ document.addEventListener('DOMContentLoaded', () => {
   // ==========================================
   if (fullRadarScanBtn) {
     fullRadarScanBtn.addEventListener('click', async () => {
+      if (!API.getToken()) {
+        authModal.classList.add('open');
+        alert('請先登入系統後再啟動全域掃描！');
+        return;
+      }
+
       fullRadarScanBtn.disabled = true;
       fullRadarLoading.style.display = 'block';
       matrixSectionCard.style.display = 'none';
       strategySectionCard.style.display = 'none';
+
+      // 計時器提示
+      let elapsed = 0;
+      const timerEl = fullRadarLoading.querySelector('p');
+      const originalText = timerEl ? timerEl.innerText : '';
+      const timerInterval = setInterval(() => {
+        elapsed += 1;
+        if (timerEl) {
+          timerEl.innerText = `Playwright 正在背景掃描日曆與兩大場地... (已耗時 ${elapsed} 秒)`;
+        }
+      }, 1000);
 
       try {
         const res = await API.scanFullRadar();
@@ -54,144 +71,265 @@ document.addEventListener('DOMContentLoaded', () => {
         state.matrixData = res.matrix;
         renderRadarMatrix(res.matrix);
         matrixSectionCard.style.display = 'block';
-        
-        // 滾動至矩陣區塊
-        matrixSectionCard.scrollIntoView({ behavior: 'smooth' });
       } catch (err) {
         alert('❌ 掃描過程出錯: ' + err.message);
       } finally {
+        clearInterval(timerInterval);
+        if (timerEl) timerEl.innerText = originalText;
         fullRadarScanBtn.disabled = false;
         fullRadarLoading.style.display = 'none';
       }
     });
   }
 
+
   // ==========================================
-  // Step 2: 渲染全域空位矩陣
+  // Step 2: 渲染全域空位日曆 (100% 復刻中研院體育館日曆樣式)
   // ==========================================
+  const WEEKDAYS_HEADER = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+  if (!state.activeCourt) {
+    state.activeCourt = 'A';
+  }
+
   function renderRadarMatrix(matrix) {
+    if (!matrix) return;
+    state.matrixData = matrix;
     radarMatrixContainer.innerHTML = '';
 
-    const daysA = matrix.A || [];
-    const daysB = matrix.B || [];
+    const courtA = matrix.A || [];
+    const courtB = matrix.B || [];
 
-    if (daysA.length === 0 && daysB.length === 0) {
-      radarMatrixContainer.innerHTML = '<div style="text-align:center; color:var(--accent-red);">未能在中研院系統抓取到任何日曆格</div>';
+    if (courtA.length === 0 && courtB.length === 0) {
+      radarMatrixContainer.innerHTML = '<div style="text-align:center; padding:2rem; color:#e74c3c; font-weight:600;">⚠️ 未能抓取到日曆時段資料，請檢查網路或中研院系統狀態。</div>';
       return;
     }
 
-    // 依日期組合 (以 daysA 順序為基準)
-    daysA.forEach((dayInfoA, index) => {
-      const dayInfoB = daysB[index] || { slots: [] };
-      const dayNum = dayInfoA.dayNum;
-      const headerText = dayInfoA.headerText || `05/${dayNum}`;
+    const currentCourt = state.activeCourt || 'A';
+    const days = currentCourt === 'A' ? courtA : courtB;
+    const courtTitle = currentCourt === 'A' ? '網球場 A Tennis court A' : '網球場 B Tennis court B';
+    const monthTitle = matrix.monthTitle || 'September 2026';
 
-      const dayBlock = document.createElement('div');
-      dayBlock.className = 'radar-day-block';
+    // 1. 球場切換 Tabs (網球場 A / 網球場 B)
+    const tabsContainer = document.createElement('div');
+    tabsContainer.className = 'sinica-court-tabs';
+    tabsContainer.innerHTML = `
+      <button class="sinica-court-tab ${currentCourt === 'A' ? 'active' : ''}" id="court-tab-a">
+        🎾 網球場 A Tennis court A
+      </button>
+      <button class="sinica-court-tab ${currentCourt === 'B' ? 'active' : ''}" id="court-tab-b">
+        🎾 網球場 B Tennis court B
+      </button>
+    `;
+    radarMatrixContainer.appendChild(tabsContainer);
 
-      let courtAHTML = renderCourtRowHTML('A', dayNum, headerText, dayInfoA.slots);
-      let courtBHTML = renderCourtRowHTML('B', dayNum, headerText, dayInfoB.slots);
-
-      dayBlock.innerHTML = `
-        <div class="radar-day-header">
-          📅 ${headerText} (日曆格 ${dayNum})
-        </div>
-        ${courtAHTML}
-        ${courtBHTML}
-      `;
-
-      radarMatrixContainer.appendChild(dayBlock);
+    tabsContainer.querySelector('#court-tab-a').addEventListener('click', () => {
+      state.activeCourt = 'A';
+      renderRadarMatrix(state.matrixData);
+    });
+    tabsContainer.querySelector('#court-tab-b').addEventListener('click', () => {
+      state.activeCourt = 'B';
+      renderRadarMatrix(state.matrixData);
     });
 
-    // 為所有 slot 綁定點擊事件
-    bindSlotClickEvents();
-  }
-
-  function renderCourtRowHTML(court, dayNum, headerText, slots) {
-    if (!slots || slots.length === 0) {
-      return `
-        <div class="radar-court-row">
-          <span class="radar-court-badge badge-court-${court.toLowerCase()}">${court} 場</span>
-          <span style="font-size:0.75rem; color:var(--text-dim);">當日不開放或無時段資訊</span>
-        </div>
-      `;
-    }
-
-    const slotChipsHTML = slots.map(slot => {
-      let statusClass = 'status-booked';
-      let statusLabel = '已預約';
-
-      if (slot.isAvailable) {
-        statusClass = 'status-available';
-        statusLabel = '可預約';
-      } else if (slot.isOpenPending) {
-        statusClass = 'status-pending';
-        statusLabel = '即將開放';
-      }
-
-      const isPicked = state.selectedStrategy.findIndex(
-        s => s.dayNum === dayNum && s.court === court && s.startTime === slot.startTime
-      );
-
-      const pickedBadge = isPicked > -1 ? `<span class="slot-pick-badge">${isPicked + 1}</span>` : '';
-      const selectedClass = isPicked > -1 ? 'selected' : '';
-
-      return `
-        <div class="matrix-slot-chip ${statusClass} ${selectedClass}" 
-             data-day="${dayNum}" 
-             data-header="${headerText}" 
-             data-court="${court}" 
-             data-start="${slot.startTime}" 
-             data-title="${slot.title}">
-          ${slot.startTime || slot.text} ${slot.isAvailable ? '🟢' : (slot.isOpenPending ? '🟡' : '🔴')}
-          ${pickedBadge}
-        </div>
-      `;
-    }).join('');
-
-    return `
-      <div class="radar-court-row">
-        <span class="radar-court-badge badge-court-${court.toLowerCase()}">${court} 場</span>
-        <div class="radar-slots-flex">
-          ${slotChipsHTML}
-        </div>
+    // 2. 月份列與導航按鈕 (September 2026 ▲ | < > 當月 兩週內)
+    const monthBar = document.createElement('div');
+    monthBar.className = 'sinica-month-bar';
+    monthBar.innerHTML = `
+      <div class="sinica-month-title">
+        <span>${monthTitle}</span>
+        <span class="sinica-chevron">▲</span>
+      </div>
+      <div class="calendar__toolbar">
+        <button class="sinica-tool-btn" title="上個月">‹</button>
+        <button class="sinica-tool-btn" title="下個月">›</button>
+        <button class="sinica-tool-btn">當月</button>
+        <button class="sinica-tool-btn active">兩週內</button>
       </div>
     `;
-  }
+    radarMatrixContainer.appendChild(monthBar);
 
-  function bindSlotClickEvents() {
-    document.querySelectorAll('.matrix-slot-chip').forEach(chip => {
-      chip.addEventListener('click', () => {
-        const dayNum = chip.dataset.day;
-        const headerText = chip.dataset.header;
-        const court = chip.dataset.court;
-        const startTime = chip.dataset.start;
-        const title = chip.dataset.title;
+    // 3. 橘色預約備註提示
+    const noticeEl = document.createElement('div');
+    noticeEl.className = 'sinica-notice';
+    noticeEl.textContent = '註：場地可多人預約時，相關資訊會顯示成 N / Max (已約人數 / 可約人數)';
+    radarMatrixContainer.appendChild(noticeEl);
 
-        if (!startTime) {
-          alert('該時段無法辨識具體時間');
-          return;
-        }
+    // 4. 圖例列 (可預約、院內同仁、院外人士、團體、不可預約)
+    const legendList = document.createElement('ul');
+    legendList.className = 'timeline-desc';
+    legendList.innerHTML = `
+      <li><span class="legend-box legend-available"></span>可預約</li>
+      <li><span class="legend-box legend-sinica"></span>院內同仁</li>
+      <li><span class="legend-box legend-non-sinica"></span>院外人士</li>
+      <li><span class="legend-box legend-group"></span>團體</li>
+      <li><span class="legend-box legend-no-open"></span>不可預約</li>
+    `;
+    radarMatrixContainer.appendChild(legendList);
 
-        const existIndex = state.selectedStrategy.findIndex(
-          s => s.dayNum === dayNum && s.court === court && s.startTime === startTime
-        );
+    // 5. 七欄式兩週日曆主網格
+    const scrollWrapper = document.createElement('div');
+    scrollWrapper.className = 'calendar__scroll-wrapper';
 
-        if (existIndex > -1) {
-          // 移除
-          state.selectedStrategy.splice(existIndex, 1);
-        } else {
-          // 加入志願清單
-          state.selectedStrategy.push({ dayNum, headerText, court, startTime, title });
-        }
+    const calendarGrid = document.createElement('div');
+    calendarGrid.className = 'calendar__date';
 
-        // 重新渲染矩陣 (更新數字 badge)
-        renderRadarMatrix(state.matrixData);
-        // 更新 Step 3 志願清單
-        renderStrategyQueue();
-      });
+    // 5a. 星期表頭 (Su, Mo, Tu, We, Th, Fr, Sa)
+    WEEKDAYS_HEADER.forEach(w => {
+      const weekHeader = document.createElement('div');
+      weekHeader.className = 'calendar__week';
+      weekHeader.textContent = w;
+      calendarGrid.appendChild(weekHeader);
     });
+
+    // 5b. 14 天日曆格
+    days.forEach((dayInfo, dayIdx) => {
+      const dayItem = document.createElement('div');
+      dayItem.className = 'calendar__day-item';
+
+      const isToday = !!dayInfo.isToday;
+      const dayNum = dayInfo.dayNum || String(dayIdx + 1);
+      const headerText = dayInfo.headerText || dayNum;
+
+      // 日期標頭 (今天標示深藍圓圈)
+      const dayHeader = document.createElement('div');
+      dayHeader.className = 'calendar__day-header';
+      dayHeader.innerHTML = `<span class="calendar__day-text ${isToday ? 'calendar__selected-date' : ''}">${dayNum}</span>`;
+      dayItem.appendChild(dayHeader);
+
+      // 時段清單 (2 欄子網格，左右對齊 16 個時段)
+      const detailUl = document.createElement('ul');
+      detailUl.className = 'calendar__detail';
+
+      const slots = dayInfo.slots || [];
+      slots.forEach(slot => {
+        const detailLi = document.createElement('li');
+        detailLi.className = 'calendar__detail-item';
+
+        const parsed = parseSinicaSlot(slot, currentCourt, dayNum, headerText);
+        const chip = document.createElement('div');
+        chip.className = `timeline__identity ${parsed.cls}${parsed.isPicked ? ' selected' : ''}`;
+        chip.title = parsed.title;
+
+        if (parsed.isPicked) {
+          const badge = document.createElement('span');
+          badge.className = 'priority-num-badge';
+          badge.textContent = parsed.pickRank;
+          chip.appendChild(badge);
+        }
+
+        const textSpan = document.createElement('span');
+        textSpan.textContent = parsed.displayText;
+        chip.appendChild(textSpan);
+
+        if (parsed.clickable) {
+          chip.style.cursor = 'pointer';
+          chip.addEventListener('click', () => {
+            handleSlotClick(currentCourt, dayNum, headerText, slot, parsed);
+          });
+        }
+
+        detailLi.appendChild(chip);
+        detailUl.appendChild(detailLi);
+      });
+
+      dayItem.appendChild(detailUl);
+      calendarGrid.appendChild(dayItem);
+    });
+
+    scrollWrapper.appendChild(calendarGrid);
+    radarMatrixContainer.appendChild(scrollWrapper);
   }
+
+  // 解析時段狀態與中研院原生顏色類別
+  function parseSinicaSlot(slot, court, dayNum, headerText) {
+    const rawClass = slot.className || '';
+    const text = slot.text || '';
+    const title = slot.title || text;
+    let cls = '';
+    let displayText = text;
+    let clickable = false;
+
+    if (rawClass.includes('timeline__identity_sinica')) {
+      cls = 'timeline__identity_sinica';
+      displayText = '已預約';
+      clickable = true; // 可用於撿漏或登記備選
+    } else if (rawClass.includes('timeline__identity_non-sinica')) {
+      cls = 'timeline__identity_non-sinica';
+      displayText = '已預約';
+      clickable = true;
+    } else if (rawClass.includes('timeline__identity_group')) {
+      cls = 'timeline__identity_group';
+      displayText = '已預約';
+      clickable = false; // 團體包場不可搶
+    } else if (text.includes('休館') || text.includes('不開放') || text.includes('停用')) {
+      cls = 'slot-closed';
+      displayText = '休館';
+      clickable = false;
+    } else if (slot.isOpenPending || text.includes('開放') || /^\d{2}\/\d{2}/.test(text)) {
+      cls = 'slot-pending';
+      const m = text.match(/(\d{2}\/\d{2})/);
+      displayText = m ? `${m[1]}...` : '即將開放';
+      clickable = true; // 重點搶票對象！
+    } else if (slot.isAvailable || text.includes('~')) {
+      cls = 'slot-available';
+      const timeMatch = title.match(/(\d{2}):\d{2}~/);
+      if (timeMatch) {
+        const sH = timeMatch[1];
+        const eH = String(parseInt(sH, 10) + 1).padStart(2, '0');
+        displayText = `${sH}~${eH}`;
+      } else if (text.includes('~')) {
+        displayText = text.replace(/:\d{2}/g, '');
+      }
+      clickable = true;
+    } else if (slot.isBooked || text.includes('已預約')) {
+      cls = 'timeline__identity_non-sinica';
+      displayText = '已預約';
+      clickable = true;
+    } else {
+      cls = 'slot-available';
+      clickable = true;
+    }
+
+    const pickedIndex = state.selectedStrategy.findIndex(
+      s => s.dayNum === dayNum && s.court === court && (s.startTime === slot.startTime || s.title === title)
+    );
+    const isPicked = pickedIndex > -1;
+
+    return {
+      cls,
+      displayText,
+      title,
+      clickable,
+      isPicked,
+      pickRank: isPicked ? pickedIndex + 1 : 0
+    };
+  }
+
+  function handleSlotClick(court, dayNum, headerText, slot, parsed) {
+    const startTime = slot.startTime || parsed.title || parsed.displayText;
+    const existIndex = state.selectedStrategy.findIndex(
+      s => s.dayNum === dayNum && s.court === court && (s.startTime === slot.startTime || s.title === parsed.title)
+    );
+
+    if (existIndex > -1) {
+      state.selectedStrategy.splice(existIndex, 1);
+    } else {
+      state.selectedStrategy.push({
+        court: court,
+        dayNum: dayNum,
+        headerText: headerText,
+        startTime: slot.startTime || startTime,
+        title: parsed.title,
+        displayText: parsed.displayText,
+        isPending: parsed.cls === 'slot-pending'
+      });
+    }
+
+    renderRadarMatrix(state.matrixData);
+    renderStrategyQueue();
+  }
+
+
 
   // ==========================================
   // Step 3: 搶票策略確認與排隊清單
@@ -377,6 +515,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const token = API.getToken();
     if (!token) {
       authModal.classList.add('open');
+      taskList.innerHTML = `
+        <div style="text-align: center; padding: 2rem; color: var(--text-dim);">
+          🔒 請先登入以檢視與排定搶票任務
+        </div>
+      `;
       return;
     }
 
@@ -395,9 +538,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
       await loadTasks();
     } catch (err) {
+      console.warn('Auth error:', err);
       authModal.classList.add('open');
+      taskList.innerHTML = `
+        <div style="text-align: center; padding: 2rem; color: var(--text-dim);">
+          🔒 登入驗證已過期，請重新登入
+        </div>
+      `;
     }
   }
+
+  window.addEventListener('auth:expired', () => {
+    authModal.classList.add('open');
+    taskList.innerHTML = `
+      <div style="text-align: center; padding: 2rem; color: var(--text-dim);">
+        🔒 登入已過期，請重新登入
+      </div>
+    `;
+  });
 
   document.getElementById('auth-submit-btn').addEventListener('click', async () => {
     const email = document.getElementById('auth-email-input').value;
@@ -419,3 +577,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
   checkAuthAndCreds();
 });
+

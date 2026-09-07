@@ -15,22 +15,11 @@ async def main():
         await page.locator('li[data-label="網球場 / Tennis court"]').click()
         await page.wait_for_timeout(1000)
         
-        slots = await page.evaluate('''() => {
-            const res = [];
-            document.querySelectorAll('.timeline__identity').forEach(el => {
-                res.push({
-                    title: el.getAttribute('title'),
-                    text: el.innerText.trim(),
-                    className: el.className
-                });
-            });
-            return res;
+        info = await page.evaluate('''() => {
+            const h = document.querySelectorAll('h1, h2, h3, h4, h5, .title, [class*="title"], [class*="month"]');
+            return Array.from(h).map(el => ({ tag: el.tagName, cls: el.className, text: el.innerText.trim() })).filter(x => x.text.length > 0 && x.text.length < 50);
         }''')
-        
-        print("Total slots found:", len(slots))
-        for s in slots:
-            if '已預約' not in s['text']:
-                print("NON-BOOKED SLOT:", s)
+        print("Titles found:", info)
         await b.close()
 
 if __name__ == "__main__":

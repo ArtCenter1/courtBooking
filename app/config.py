@@ -7,6 +7,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 class Settings(BaseModel):
     PROJECT_NAME: str = "中研院網球場智慧預約 SaaS 平台"
     PROJECT_VERSION: str = "0.2.0-beta"
+    BASE_DIR: Path = BASE_DIR
     
     # 伺服器配置
     HOST: str = "0.0.0.0"

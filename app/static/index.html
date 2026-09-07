@@ -7,8 +7,7 @@
   <!-- Google Fonts: Outfit -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/style.css?v=2.4">
 </head>
 <body>
 
@@ -27,49 +26,37 @@
   </header>
 
   <!-- 主內容區 -->
-  <main class="container">
-    <div class="grid-layout">
+  <main class="container" style="max-width: 1440px;">
+    <!-- Step 1: 全域掃描觸發卡片 -->
+    <div class="card" style="border-color: rgba(59, 130, 246, 0.3); margin-bottom: 1.5rem;">
+      <div class="card-header">
+        <h2 class="card-title">🔍 Step 1: 掃描未來兩週全域空位地圖 (Sinica 實時日曆)</h2>
+        <button class="btn btn-outline btn-sm" onclick="openCredModal()">🔑 中研院帳密設定</button>
+      </div>
+      <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+        點擊下方按鈕啟動 Playwright 引擎，即時爬取中研院體育館未來兩週（包含已預約、可預約、即將放票）之完整日曆與場地地圖。
+      </p>
+      <button id="full-radar-scan-btn" class="btn btn-primary btn-block" style="background: linear-gradient(135deg, #10b981, #059669); font-size: 1.05rem; padding: 0.9rem;">
+        🌐 啟動全域空位掃描 (預估 15~25 秒)
+      </button>
       
-      <!-- 左側：搶票任務設定區 (全新 掃描優先 工作流) -->
+      <div id="full-radar-loading" style="display: none; text-align: center; margin-top: 1.25rem; padding: 1.2rem; background: rgba(16, 185, 129, 0.05); border-radius: var(--radius-sm); border: 1px dashed rgba(16, 185, 129, 0.3);">
+        <div class="spinner" style="margin: 0 auto 0.5rem auto;"></div>
+        <p style="font-size: 0.95rem; color: #34d399; font-weight: 600;">Playwright 正在背景爬取中研院日曆 (A / B 兩大球場)...</p>
+        <p style="font-size: 0.8rem; color: var(--text-dim);">解析 14 天時段狀態、院內/院外/團體預約名單與即將放票日期，請稍候</p>
+      </div>
+    </div>
+
+    <!-- Step 2: 完整空位日曆地圖 (Sinica 官網原貌 100% 復刻，全寬展開) -->
+    <div id="matrix-section-card" class="card sinica-calendar-card" style="display: none; margin-bottom: 2rem; background: #ffffff; color: #333333; padding: 1.5rem; border: 1px solid #e0e0e0;">
+      <!-- 日曆與場地空位矩陣容器 (由 JS 渲染) -->
+      <div id="radar-matrix-container" class="radar-matrix-container"></div>
+    </div>
+
+    <!-- 下方二欄：Step 3 搶票策略排程 (左) + 監控中心 (右) -->
+    <div class="grid-layout">
+      <!-- 左側：Step 3 搶票策略與待命 -->
       <section>
-        <!-- Step 1: 全域掃描觸發卡片 -->
-        <div class="card" style="border-color: rgba(59, 130, 246, 0.3);">
-          <div class="card-header">
-            <h2 class="card-title">🔍 Step 1: 掃描未來兩週全域空位地圖</h2>
-          </div>
-          <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 1.25rem;">
-            點擊下方按鈕啟動 Playwright 引擎，即時爬取中研院體育館未來兩週（包含已預約、可預約、即將放票）之全場地地圖。
-          </p>
-          <button id="full-radar-scan-btn" class="btn btn-primary btn-block" style="background: linear-gradient(135deg, #10b981, #059669); font-size: 1.05rem; padding: 0.9rem;">
-            🌐 啟動全域空位掃描 (預估 15~25 秒)
-          </button>
-          
-          <div id="full-radar-loading" style="display: none; text-align: center; margin-top: 1.25rem; padding: 1rem; background: rgba(16, 185, 129, 0.05); border-radius: var(--radius-sm);">
-            <div class="spinner" style="margin: 0 auto 0.5rem auto;"></div>
-            <p style="font-size: 0.9rem; color: #34d399; font-weight: 600;">Playwright 正在背景掃描日曆與兩大場地...</p>
-            <p style="font-size: 0.78rem; color: var(--text-dim);">包含 parsing 時段狀態與標記未來開放日，請稍候</p>
-          </div>
-        </div>
-
-        <!-- Step 2: 完整空位地圖 (矩陣 display: none 初始隱藏) -->
-        <div id="matrix-section-card" class="card" style="display: none;">
-          <div class="card-header">
-            <h2 class="card-title">🗺️ Step 2: 選擇搶位志願順序</h2>
-            <div style="font-size: 0.8rem; display: flex; gap: 0.75rem; align-items: center;">
-              <span>🟢 可直接預約</span>
-              <span>🟡 即將開放</span>
-              <span>🔴 已預約</span>
-            </div>
-          </div>
-          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
-            點擊下方格子依序排定志願（① 首選, ② 次選, ③ 三選...）。可跨日期與場地自由組合。
-          </p>
-          
-          <!-- 日曆與場地空位矩陣容器 -->
-          <div id="radar-matrix-container" class="radar-matrix-container"></div>
-        </div>
-
-        <!-- Step 3: 搶票策略與待命 (初始隱藏) -->
         <div id="strategy-section-card" class="card" style="display: none; border-color: rgba(139, 92, 246, 0.4);">
           <div class="card-header">
             <h2 class="card-title">🚀 Step 3: 確認搶票策略並發送待命</h2>
@@ -118,29 +105,26 @@
             </div>
           </div>
 
-          <button id="arm-strategy-btn" class="btn btn-primary btn-block" style="background: linear-gradient(135deg, #8b5cf6, #3b82f6); font-size: 1.05rem; padding: 0.85rem;">
+          <button id="arm-strategy-btn" class="btn btn-primary btn-block" style="background: linear-gradient(135deg, #8b5cf6, #3b82f6); font-size: 1.05rem; padding: 0.85rem; margin-top: 1rem;">
             🎯 制定腳本並讓程式進入待命
           </button>
         </div>
       </section>
-
 
       <!-- 右側：排程任務狀態與紀錄 -->
       <section>
         <div class="card">
           <div class="card-header">
             <h2 class="card-title">📋 搶票排程與監控中心</h2>
-            <button class="btn btn-outline btn-sm" onclick="openCredModal()">🔑 中研院帳密</button>
           </div>
           
           <div id="task-list">
             <div style="text-align: center; padding: 2rem; color: var(--text-dim);">
-              載入任務中...
+              🎾 載入中，若尚未登入請先登入系統...
             </div>
           </div>
         </div>
       </section>
-
     </div>
   </main>
 
@@ -208,7 +192,9 @@
     </div>
   </div>
 
-  <script src="/static/js/api.js"></script>
-  <script src="/static/js/app.js"></script>
+  <script src="/static/js/api.js?v=2.4"></script>
+  <script src="/static/js/app.js?v=2.4"></script>
 </body>
 </html>
+
+
