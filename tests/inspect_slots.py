@@ -15,11 +15,26 @@ async def main():
         await page.locator('li[data-label="網球場 / Tennis court"]').click()
         await page.wait_for_timeout(1000)
         
-        info = await page.evaluate('''() => {
-            const h = document.querySelectorAll('h1, h2, h3, h4, h5, .title, [class*="title"], [class*="month"]');
-            return Array.from(h).map(el => ({ tag: el.tagName, cls: el.className, text: el.innerText.trim() })).filter(x => x.text.length > 0 && x.text.length < 50);
+        slots = await page.evaluate('''() => {
+            const arr = [];
+            document.querySelectorAll('.timeline__identity').forEach(el => {
+                const text = el.innerText.trim();
+                const title = el.getAttribute('title') || '';
+                if (text.includes('開放') || title.includes('開放')) {
+                    arr.push({
+                        text,
+                        title,
+                        className: el.className,
+                        html: el.outerHTML,
+                        attrs: Array.from(el.attributes).map(a => ({ name: a.name, value: a.value }))
+                    });
+                }
+            });
+            return arr;
         }''')
-        print("Titles found:", info)
+        print(f"Total upcoming slots found: {len(slots)}")
+        for s in slots[:6]:
+            print(s)
         await b.close()
 
 if __name__ == "__main__":

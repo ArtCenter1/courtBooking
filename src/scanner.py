@@ -203,9 +203,17 @@ class CalendarScanner:
                                     }
                                     
                                     const isBooked = text.includes('已預約');
-                                    const isOpenPending = text.includes('開放');
-                                    const isAvailable = (!isBooked && !isOpenPending && !text.includes('休館') && (text.includes('~') || startTime !== ""));
+                                    const isOpenPending = text.includes('開放') || title.includes('開放');
+                                    const isClosed = text.includes('休館') || title.includes('休館');
+                                    const isAvailable = (!isBooked && !isOpenPending && !isClosed && (text.includes('~') || startTime !== ""));
                                     
+                                    // 提取開放日期時間 e.g. "09/08"
+                                    let openDate = "";
+                                    const openMatch = (title + " " + text).match(/(\d{1,2}\/\d{1,2})/);
+                                    if (openMatch) {
+                                        openDate = openMatch[1];
+                                    }
+
                                     slotItems.push({
                                         title: title,
                                         text: text,
@@ -213,7 +221,9 @@ class CalendarScanner:
                                         className: className,
                                         isBooked: isBooked,
                                         isOpenPending: isOpenPending,
-                                        isAvailable: isAvailable
+                                        isClosed: isClosed,
+                                        isAvailable: isAvailable,
+                                        openDate: openDate
                                     });
                                 });
                                 

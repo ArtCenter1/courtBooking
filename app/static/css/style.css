@@ -714,56 +714,81 @@ body {
   padding: 0 2px;
 }
 
-/* Sinica Staff (院內同仁) */
+/* Sinica Staff (院內同仁) - 原始箭頭，不可互動 */
 .timeline__identity.timeline__identity_sinica {
   background: rgb(204, 226, 243);
   color: rgb(33, 33, 33);
   border-color: #b3d4ed;
+  cursor: default !important;
+  pointer-events: none;
 }
 
-/* Non-Sinica (院外人士) */
+/* Non-Sinica (院外人士已預約) - 原始箭頭，不可互動 */
 .timeline__identity.timeline__identity_non-sinica {
   background: rgb(240, 212, 245);
   color: rgb(33, 33, 33);
   border-color: #e5bee9;
+  cursor: default !important;
+  pointer-events: none;
 }
 
-/* Group (團體) */
+/* Group (團體已預約) - 原始箭頭，不可互動 */
 .timeline__identity.timeline__identity_group {
   background: rgb(196, 229, 191);
   color: rgb(33, 33, 33);
   border-color: #b3dba9;
+  cursor: default !important;
+  pointer-events: none;
 }
 
-/* Closed (休館) */
+/* Closed (休館/不開放) - 原始箭頭，不可互動 */
 .timeline__identity.slot-closed {
   background: rgb(231, 231, 231);
   color: rgb(113, 113, 122);
   border-color: #e4e4e7;
-  cursor: not-allowed;
+  cursor: default !important;
+  pointer-events: none;
 }
 
-/* Pending / Opening soon (09/08開放 / 09/08...) */
+/* Pending / Opening soon (未來開放時段 / 臨時解除開放) - 顯眼閃爍提醒 + 手型可預約 */
+@keyframes pulse-attention {
+  0%, 100% {
+    background-color: #fef08a;
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7);
+    transform: scale(1);
+  }
+  50% {
+    background-color: #fde047;
+    border-color: #d97706;
+    box-shadow: 0 0 10px 3px rgba(245, 158, 11, 0.85);
+    transform: scale(1.04);
+  }
+}
+
 .timeline__identity.slot-pending {
-  background: #fef3c7;
-  color: #92400e;
-  border-color: #fde68a;
-  cursor: pointer;
-  font-weight: 600;
+  background: #fef08a;
+  color: #854d0e;
+  border: 1.5px solid #f59e0b;
+  cursor: pointer !important;
+  font-weight: 700;
+  animation: pulse-attention 1.6s infinite ease-in-out;
+  z-index: 3;
 }
 
 .timeline__identity.slot-pending:hover {
-  background: #fde68a;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 5px rgba(217, 119, 6, 0.25);
+  background: #facc15;
+  border-color: #b45309;
+  box-shadow: 0 0 12px 4px rgba(217, 119, 6, 0.95);
+  transform: scale(1.08);
 }
 
-/* Available (可預約) */
+/* Available (符合院外人士可預約之空位) - 手型可互動 */
 .timeline__identity.slot-available {
   background: #ffffff;
   color: #1e293b;
   border-color: #cbd5e1;
-  cursor: pointer;
+  cursor: pointer !important;
   font-weight: 600;
 }
 
@@ -772,7 +797,7 @@ body {
   border-color: #38bdf8;
   color: #0369a1;
   transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(56, 189, 248, 0.3);
+  box-shadow: 0 2px 6px rgba(56, 189, 248, 0.35);
 }
 
 /* Selected state: highlighted in deep royal blue with priority badge */

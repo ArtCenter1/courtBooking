@@ -249,27 +249,34 @@ document.addEventListener('DOMContentLoaded', () => {
     let displayText = text;
     let clickable = false;
 
+    // 1. 院內同仁預約 - 不可互動，原始箭頭
     if (rawClass.includes('timeline__identity_sinica')) {
       cls = 'timeline__identity_sinica';
       displayText = '已預約';
-      clickable = true; // 可用於撿漏或登記備選
+      clickable = false;
+    // 2. 院外人士預約 - 不可互動，原始箭頭
     } else if (rawClass.includes('timeline__identity_non-sinica')) {
       cls = 'timeline__identity_non-sinica';
       displayText = '已預約';
-      clickable = true;
+      clickable = false;
+    // 3. 團體預約 - 不可互動，原始箭頭
     } else if (rawClass.includes('timeline__identity_group')) {
       cls = 'timeline__identity_group';
       displayText = '已預約';
-      clickable = false; // 團體包場不可搶
-    } else if (text.includes('休館') || text.includes('不開放') || text.includes('停用')) {
+      clickable = false;
+    // 4. 休館/停用 - 不可互動，原始箭頭
+    } else if (slot.isClosed || text.includes('休館') || text.includes('不開放') || text.includes('停用')) {
       cls = 'slot-closed';
       displayText = '休館';
       clickable = false;
-    } else if (slot.isOpenPending || text.includes('開放') || /^\d{2}\/\d{2}/.test(text)) {
+    // 5. 即將開放/臨時解除開放時段 - 顯眼閃爍提醒 + 滑鼠浮現開放時間 + 手型可互動預約
+    } else if (slot.isOpenPending || text.includes('開放') || /^\d{1,2}\/\d{1,2}/.test(text)) {
       cls = 'slot-pending';
-      const m = text.match(/(\d{2}\/\d{2})/);
-      displayText = m ? `${m[1]}...` : '即將開放';
-      clickable = true; // 重點搶票對象！
+      const m = (title + " " + text).match(/(\d{1,2}\/\d{1,2})/);
+      const openDate = m ? m[1] : (slot.openDate || '即將開放');
+      displayText = `⚡ ${openDate}開放`;
+      clickable = true; // 點擊可排定搶位志願
+    // 6. 院外人士可預約時段 - 手型可互動
     } else if (slot.isAvailable || text.includes('~')) {
       cls = 'slot-available';
       const timeMatch = title.match(/(\d{2}):\d{2}~/);
@@ -284,10 +291,24 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (slot.isBooked || text.includes('已預約')) {
       cls = 'timeline__identity_non-sinica';
       displayText = '已預約';
-      clickable = true;
+      clickable = false;
     } else {
       cls = 'slot-available';
       clickable = true;
+    }
+
+    // 滑鼠 hover 提示資訊
+    let hoverTitle = title;
+    if (cls === 'slot-pending') {
+      const openDate = (title + " " + text).match(/(\d{1,2}\/\d{1,2})/) ? (title + " " + text).match(/(\d{1,2}\/\d{1,2})/)[1] : '';
+      const timeRange = title.split(' ')[0] || slot.startTime || displayText;
+      hoverTitle = `⚡【即將開放預約時段】\n場地時段：${timeRange}\n預約開放時間：${openDate ? openDate + ' 00:00' : '近期開放'}\n👉 點擊可加入優先搶票志願待命清單`;
+    } else if (cls === 'slot-available') {
+      hoverTitle = `🟢【可預約時段】${title || displayText}\n👉 點擊加入預約清單`;
+    } else if (cls === 'slot-closed') {
+      hoverTitle = `⚪【休館不開放】${title || '本日暫停營業'}`;
+    } else {
+      hoverTitle = `🔴【他人已預約】${title || '此時段已被預約'}`;
     }
 
     const pickedIndex = state.selectedStrategy.findIndex(
@@ -298,7 +319,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return {
       cls,
       displayText,
-      title,
+      title: hoverTitle,
       clickable,
       isPicked,
       pickRank: isPicked ? pickedIndex + 1 : 0
