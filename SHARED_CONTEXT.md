@@ -15,8 +15,17 @@
 
 ## 📋 決策記錄 (Decisions)
 - **[2026-09-01] Release v0.1.0-alpha**: 將具備時鐘校準與已修復 Bug 的 CLI 模組封裝為 alpha 版本並推送獨立分支保護。
-- **[2026-09-01] SaaS 架構選型**: 採用 FastAPI + SQLite/SQLModel + Modern Responsive SPA 前端 + PWA，兼具極簡卡片時段選擇與摺疊進階微調。
-- **[2026-09-01] 憑證安全**: 採用 AES-256 加密儲存中研院帳密，搶票前 10 分鐘自動模擬登入換發 Session。
+- **[2026-09-01] SaaS 架構選型**: 採用 FastAPI + SQLite/SQLModel + JWT 認證 + Playwright (SniperBridge)。
+- **[2026-09-07] Live Radar 雷達 API**: 後端 `src/scanner.py` 新增 `scan_day_slots()` 與 `scan_full_calendar()` 方法，支援全域日曆與 A/B 場地解析。
+- **[2026-09-07] 全新「掃描優先 (Scan-First)」UX 流程**: 改為「1. 點擊全域掃描 -> 2. 顯示未來兩週完整空位地圖 (可預約🟢/即將開放🟡/已預約🔴) -> 3. 點選志願順序 (①②③) -> 4. 制定腳本進入待命 -> 5. 執行並回報」之工作流。
+
+---
+
+## 📌 當前任務 (Current Tasks)
+- `[x]` 後端: 實作 `scan_full_calendar` 與 `POST /api/scanner/full-radar` 端點。
+- `[x]` 前端: 重構 `index.html` layout 為 Step 1 -> Step 2 -> Step 3 結構。
+- `[x]` 前端: 重寫 `app.js` 矩陣互動、志願選擇與腳本待命邏輯。
+- `[x]` 測試: 通過全套單元測試與 SaaS 整合測試。
 
 ## ⚠️ 已知阻礙與注意事項
 - 中研院放票時空位 class 帶有 `timeline__identity_no-open`，切勿以此 class 作為未開放判斷。

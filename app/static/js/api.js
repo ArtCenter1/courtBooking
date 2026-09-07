@@ -104,5 +104,19 @@ const API = {
   // 雷達掃描 API
   async scanSlots(court = 'A', day = '05') {
     return await this.request(`/api/scanner/slots?court=${court}&day=${day}`);
+  },
+
+  async scanOpeningCourts({ day, court, requested_slots }) {
+    return await this.request('/api/scanner/slots', {
+      method: 'POST',
+      body: JSON.stringify({ day, court, requested_slots })
+    });
+  },
+
+  async scanFullRadar() {
+    return await this.request('/api/scanner/full-radar', {
+      method: 'POST'
+    });
   }
 };
+
