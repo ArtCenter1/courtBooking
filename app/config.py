@@ -11,7 +11,7 @@ class Settings(BaseModel):
     
     # 伺服器配置
     HOST: str = "0.0.0.0"
-    PORT: int = 8000
+    PORT: int = 8030
     DEBUG: bool = True
     
     # 資料庫配置

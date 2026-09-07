@@ -20,7 +20,7 @@ async def verify():
         token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0IiwiZW1haWwiOiJ1c2VyMUB0ZXN0LmNvbSIsImV4cCI6MTc4OTM4OTM5NH0.1PAbxY4LGyLIQCVyV9oaGcpoyCRfNl18VHHoNMo32Y4'
         await page.add_init_script(f"localStorage.setItem('court_jwt_token', '{token}');")
         
-        await page.goto('http://127.0.0.1:8000/')
+        await page.goto('http://127.0.0.1:8030/')
         print('Page loaded with token.')
         await page.wait_for_timeout(1000)
         
