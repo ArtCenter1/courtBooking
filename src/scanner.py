@@ -132,9 +132,11 @@ class CalendarScanner:
                 await browser.close()
                 return {} if court == 'ALL' else []
 
-    async def scan_full_calendar(self, headless=True):
+    async def scan_full_calendar(self, headless=True, view_mode: str = "two_weeks", nav_action: str = None):
         """
-        全域掃描：一次抓取完整日曆（未來 14 天/全部日曆格）A/B 兩場地的所有時段狀態
+        全域掃描：一次抓取完整日曆 A/B 兩場地的所有時段狀態
+        view_mode: 'two_weeks' (兩週內) 或 'current_month' (當月)
+        nav_action: 可選 'prev_month' (上個月), 'next_month' (下個月), 'two_weeks' (兩週內), 'current_month' (當月)
         """
         state_file = self.auth.state_file if hasattr(self.auth, 'state_file') else None
         
@@ -163,11 +165,30 @@ class CalendarScanner:
                 await page.locator('body').click(position={"x": 10, "y": 10})
                 await page.wait_for_timeout(500)
 
+                # 若指定了切換動作，模擬點擊中研院官方工具列按鈕
+                action_map = {
+                    "prev_month": 'button[title="上個月"], .calendar__last-month',
+                    "next_month": 'button[title="下個月"], .calendar__next-month',
+                    "current_month": 'button:has-text("當月"), .calendar__current-month',
+                    "two_weeks": 'button:has-text("兩週內"), .calendar__two-weeks'
+                }
+                
+                if nav_action and nav_action in action_map:
+                    target_btn = page.locator(f'#js-v1 {action_map[nav_action]}').first
+                    if await target_btn.count() > 0:
+                        await target_btn.click()
+                        await page.wait_for_timeout(1500)
+                elif view_mode == "current_month":
+                    target_btn = page.locator('#js-v1 button:has-text("當月"), .calendar__current-month').first
+                    if await target_btn.count() > 0:
+                        await target_btn.click()
+                        await page.wait_for_timeout(1500)
+
                 tab_links = page.locator('.r-tab__link')
                 await tab_links.first.click(force=True)
-                await page.wait_for_timeout(500)
+                await page.wait_for_timeout(400)
                 await tab_links.nth(1).click(force=True)
-                await page.wait_for_timeout(500)
+                await page.wait_for_timeout(400)
 
                 scan_result = await page.evaluate(r"""
                     () => {

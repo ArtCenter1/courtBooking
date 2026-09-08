@@ -99,14 +99,23 @@ async def scan_court_slots(
             "courts_data": {}
         }
 
+class FullRadarRequest(BaseModel):
+    view_mode: Optional[str] = "two_weeks" # 'two_weeks' | 'current_month'
+    nav_action: Optional[str] = None       # 'prev_month' | 'next_month' | 'two_weeks' | 'current_month'
+
 @router.post("/full-radar")
 async def scan_full_radar(
+    req: Optional[FullRadarRequest] = None,
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session)
 ):
     """
-    全域雷達：掃描未來兩週/全部日曆格 A/B 兩場地的所有時段開放狀態
+    全域雷達：掃描未來兩週/整月份日曆格 A/B 兩場地的所有時段開放狀態
+    支援即時點擊中研院官方工具列（上個月、下個月、當月、兩週內）
     """
+    req_view_mode = req.view_mode if req else "two_weeks"
+    req_nav_action = req.nav_action if req else None
+
     state_file_path = str(SniperBridge.get_user_state_path(user.id))
     if not os.path.exists(state_file_path):
         state_file_path = str(settings.BASE_DIR / "state.json")
@@ -123,7 +132,11 @@ async def scan_full_radar(
     scanner = CalendarScanner(config, auth_mgr, notifier)
     
     try:
-        matrix = await scanner.scan_full_calendar(headless=True)
+        matrix = await scanner.scan_full_calendar(
+            headless=True,
+            view_mode=req_view_mode,
+            nav_action=req_nav_action
+        )
         return {
             "success": True,
             "matrix": matrix

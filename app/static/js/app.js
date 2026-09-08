@@ -131,7 +131,8 @@ document.addEventListener('DOMContentLoaded', () => {
       renderRadarMatrix(state.matrixData);
     });
 
-    // 2. 月份列與導航按鈕 (September 2026 ▲ | < > 當月 兩週內)
+    // 2. 月份列與導航按鈕 (September 2026 ▲ | ‹ › 當月 兩週內)
+    const currentViewMode = state.calendarViewMode || 'two_weeks';
     const monthBar = document.createElement('div');
     monthBar.className = 'sinica-month-bar';
     monthBar.innerHTML = `
@@ -140,13 +141,37 @@ document.addEventListener('DOMContentLoaded', () => {
         <span class="sinica-chevron">▲</span>
       </div>
       <div class="calendar__toolbar">
-        <button class="sinica-tool-btn" title="上個月">‹</button>
-        <button class="sinica-tool-btn" title="下個月">›</button>
-        <button class="sinica-tool-btn">當月</button>
-        <button class="sinica-tool-btn active">兩週內</button>
+        <button class="sinica-tool-btn" id="sinica-nav-prev" title="上個月">‹</button>
+        <button class="sinica-tool-btn" id="sinica-nav-next" title="下個月">›</button>
+        <button class="sinica-tool-btn ${currentViewMode === 'current_month' ? 'active' : ''}" id="sinica-nav-month">當月</button>
+        <button class="sinica-tool-btn ${currentViewMode === 'two_weeks' ? 'active' : ''}" id="sinica-nav-twoweeks">兩週內</button>
       </div>
     `;
     radarMatrixContainer.appendChild(monthBar);
+
+    // 綁定中研院官方日曆導航事件
+    async function handleCalendarNav(action, newViewMode) {
+      const originalHtml = monthBar.querySelector('.calendar__toolbar').innerHTML;
+      monthBar.querySelector('.calendar__toolbar').innerHTML = '<span style="font-size:0.8rem; color:#60a5fa; align-self:center;">⏳ 連線切換中...</span>';
+      try {
+        if (newViewMode) state.calendarViewMode = newViewMode;
+        const res = await API.scanFullRadar({
+          view_mode: state.calendarViewMode || 'two_weeks',
+          nav_action: action
+        });
+        if (res.success && res.matrix) {
+          renderRadarMatrix(res.matrix);
+        }
+      } catch (err) {
+        alert('切換日曆失敗: ' + err.message);
+        monthBar.querySelector('.calendar__toolbar').innerHTML = originalHtml;
+      }
+    }
+
+    monthBar.querySelector('#sinica-nav-prev').addEventListener('click', () => handleCalendarNav('prev_month'));
+    monthBar.querySelector('#sinica-nav-next').addEventListener('click', () => handleCalendarNav('next_month'));
+    monthBar.querySelector('#sinica-nav-month').addEventListener('click', () => handleCalendarNav('current_month', 'current_month'));
+    monthBar.querySelector('#sinica-nav-twoweeks').addEventListener('click', () => handleCalendarNav('two_weeks', 'two_weeks'));
 
     // 3. 橘色預約備註提示
     const noticeEl = document.createElement('div');

@@ -113,9 +113,13 @@ const API = {
     });
   },
 
-  async scanFullRadar() {
+  async scanFullRadar(options = {}) {
     return await this.request('/api/scanner/full-radar', {
-      method: 'POST'
+      method: 'POST',
+      body: JSON.stringify({
+        view_mode: options.view_mode || 'two_weeks',
+        nav_action: options.nav_action || null
+      })
     });
   }
 };
