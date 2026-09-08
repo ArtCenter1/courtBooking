@@ -112,7 +112,7 @@ async def handle_snipe(args, config):
     auth = AuthManager(config)
     sniper = Sniper(config, auth, notifier)
     
-    await sniper.run_snipe_task(dry_run=False)
+    await sniper.run_snipe_task(dry_run=False, keep_browser_open=True)
 
 def main():
     parser = argparse.ArgumentParser(description="中研院體育館網球場自動化搶票系統")

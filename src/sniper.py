@@ -25,7 +25,7 @@ class Sniper:
     def _get_court_section_id(self, court_name):
         return "#js-v1" if court_name.upper() == "A" else "#js-v2"
 
-    async def try_book_slot(self, page, court_name, slot_prefix, day_num, timeout_ms=2000):
+    async def try_book_slot(self, page, court_name, slot_prefix, day_num, timeout_ms=500):
         """
         嘗試鎖定指定場地、指定日期與時段，並極速點擊確認預約。
         返回 (True, message) 或 (False, message)
@@ -50,7 +50,6 @@ class Sniper:
 
             target_el = slot_locator.first
             text = (await target_el.inner_text()).strip()
-            class_name = await target_el.get_attribute('class') or ''
             
             # 若標記為已預約、休館，或明確標記為未來日期開放 (例如 09/02開放)，跳過以加速下一輪刷新
             if "已預約" in text or "休館" in text or "停用" in text:
@@ -62,19 +61,29 @@ class Sniper:
             t0 = time.time()
             await target_el.click(force=True)
             
-            # 等待「確認預約」按鈕出現並點擊
-            confirm_btn = page.locator('button:has-text("確認預約"), button:has-text("確認")')
-            await confirm_btn.wait_for(state="visible", timeout=timeout_ms)
-            await confirm_btn.first.click()
+            # 等待「確認預約」或 PrimeFaces 對話框按鈕出現並點擊 (多重容錯選擇器)
+            confirm_btn = page.locator(
+                '.ui-dialog:visible button:has-text("確認預約"), '
+                '.ui-dialog:visible button:has-text("確認"), '
+                '.ui-dialog:visible .ui-confirmdialog-yes, '
+                'button:has-text("確認預約"), '
+                'button:has-text("確認")'
+            )
+            try:
+                await confirm_btn.first.wait_for(state="visible", timeout=timeout_ms)
+                await confirm_btn.first.click()
+            except Exception:
+                # 若 500ms 內未彈出標準確認按鈕，快照當前彈窗或嘗試直接回車確認
+                await page.keyboard.press("Enter")
+
             elapsed_ms = int((time.time() - t0) * 1000)
-            
             # 短暫等待 PrimeFaces AJAX 完成
-            await page.wait_for_timeout(350)
+            await page.wait_for_timeout(250)
             return True, f"[{court_name}場] 成功點擊預約: {slot_prefix} (耗時 {elapsed_ms}ms)"
         except Exception as e:
             return False, f"[{court_name}場] 預約嘗試異常 ({slot_prefix}): {e}"
 
-    async def run_snipe_task(self, dry_run=False, dry_run_seconds=5):
+    async def run_snipe_task(self, dry_run=False, dry_run_seconds=5, keep_browser_open=False):
         """
         執行完整搶票流程
         """
@@ -102,6 +111,8 @@ class Sniper:
                 storage_state=state_file
             )
             page = await context.new_page()
+            # 自動處理任何原生 window.alert / window.confirm 彈窗
+            page.on("dialog", lambda dialog: asyncio.create_task(dialog.accept()))
 
             try:
                 # 2. 預熱與頁面載入
@@ -265,11 +276,15 @@ class Sniper:
                     self.notifier.log("👋 [模擬推演] 保持瀏覽器 8 秒後自動關閉...")
                     await asyncio.sleep(8)
                     await browser.close()
-                else:
-                    self.notifier.log("🖥️ [正式搶票] 瀏覽器視窗已保留在畫面上供您即時檢視！")
+                elif keep_browser_open:
+                    self.notifier.log("🖥️ [CLI搶票] 瀏覽器視窗已保留在畫面上供您即時檢視！")
                     self.notifier.log("👉 您可以直接在該視窗操作。按 Enter 鍵或關閉視窗即可結束程式...")
                     try:
                         await asyncio.get_event_loop().run_in_executor(None, input)
                     except Exception:
-                        await asyncio.sleep(3600)
+                        await asyncio.sleep(60)
+                    await browser.close()
+                else:
+                    self.notifier.log("💾 [SaaS自動化] 搶票衝刺已結案，已保存截圖並安全釋放瀏覽器。")
+                    await asyncio.sleep(2)
                     await browser.close()

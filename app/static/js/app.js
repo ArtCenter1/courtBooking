@@ -458,7 +458,8 @@ document.addEventListener('DOMContentLoaded', () => {
             <span>🎯 志願: ${t.primary_slots.join(', ')}</span>
             <span>⚡ 狀態: <b style="color:${getStatusColor(t.status)}">${getStatusText(t.status)}</b></span>
           </div>
-          ${t.result_message ? `<div style="font-size:0.75rem; color:var(--text-dim); margin-top:4px;">${t.result_message}</div>` : ''}
+          ${t.result_message ? `<div style="font-size:0.8rem; color:var(--text-dim); margin-top:4px;">${t.result_message}</div>` : ''}
+          ${t.screenshot_path ? `<div style="font-size:0.75rem; margin-top:4px;"><a href="/static/screenshots/${t.screenshot_path}" target="_blank" style="color:#60a5fa; text-decoration:underline;">📸 查看現場存證截圖</a></div>` : ''}
         </div>
         <div class="task-actions">
           <button class="btn btn-outline btn-sm" onclick="triggerDryRun(${t.id})">🧪 模擬</button>
@@ -467,6 +468,13 @@ document.addEventListener('DOMContentLoaded', () => {
       </div>
     `).join('');
   }
+
+  // 自動每 3 秒向後端輪詢最新任務進度
+  setInterval(() => {
+    if (state.user) {
+      loadTasks();
+    }
+  }, 3000);
 
   function getStatusColor(status) {
     if (status === 'success') return '#34d399';

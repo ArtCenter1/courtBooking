@@ -60,6 +60,7 @@ async def add_no_cache_header(request, call_next):
 app.include_router(api_router)
 
 # 掛載靜態資源目錄
+app.mount("/static/screenshots", StaticFiles(directory=str(settings.SCREENSHOT_DIR)), name="screenshots")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # 根路徑主頁
