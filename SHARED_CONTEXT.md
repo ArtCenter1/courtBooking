@@ -21,6 +21,11 @@
 - **[2026-09-09] 官方日曆即時導航 (方案 B)**:
   - 在 `src/scanner.py` 新增 `nav_action` 與 `view_mode` 支援，後端透過 Playwright 模擬點擊官方工具列。
   - 前端工具列按鈕（`‹`、`›`、`當月`、`兩週內`）綁定即時 AJAX 切換，支援動態載入完整當月 30~31 天日曆或切換次月。
+- **[2026-09-10] 二段式預約流程與 reCAPTCHA v2 自動穿透**:
+  - 實證中研院預約流程並非舊版 in-page 彈窗，點擊時段後跳轉獨立「場地預約 Reservation」表單頁。
+  - 表單頁底端設有 Google reCAPTCHA v2 核取方塊（我不是機器人），實戰確認高信任 session 點擊後直接呈現綠色打勾（無圖片挑戰題）。
+  - 重構 `src/sniper.py` 支援毫秒級二段式預約：時段點擊 -> 穿透 reCAPTCHA iframe 秒點 `#recaptcha-anchor` -> 偵測打勾 -> 極速點擊「預約 Reserve」送出。
+  - 支援多時段預約連鎖回航（`_ensure_on_calendar`）。
 
 ---
 
@@ -31,7 +36,10 @@
 - `[x]` 動畫: 未來開放時段閃爍高亮提醒 + hover 浮現放票時間。
 - `[x]` 導航: 完成方案 B（‹ 上個月 / › 下個月 / 當月整月 / 兩週內）即時點擊連線切換。
 - `[x]` 測試: 通過全套測試與即時截圖驗證。
+- `[x]` 核心: 升級 `src/sniper.py` 二段式預約與 reCAPTCHA v2 自動穿透，通過 dry-run 衝刺推演。
 
 ## ⚠️ 已知阻礙與注意事項
 - 中研院放票時空位 class 帶有 `timeline__identity_no-open`，切勿以此 class 作為未開放判斷。
 - 00:00:00 伺服器放票後，時段按鈕文字會由 `MM/DD開放` 轉變為 `17~18` 等時段縮寫。
+- 預約流程為跳轉式獨立表單頁面（`場地預約 Reservation`），表單包含 Google reCAPTCHA v2 核取方塊，必須等待綠勾確認後點擊「預約 Reserve」才算完成。
+

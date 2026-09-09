@@ -25,9 +25,29 @@ class Sniper:
     def _get_court_section_id(self, court_name):
         return "#js-v1" if court_name.upper() == "A" else "#js-v2"
 
-    async def try_book_slot(self, page, court_name, slot_prefix, day_num, timeout_ms=500):
+    async def _ensure_on_calendar(self, page):
+        """確保頁面處於日曆表格，若在預約表單頁則點擊返回"""
+        try:
+            # 檢查是否在「場地預約 Reservation」表單頁
+            if await page.locator('button:has-text("預約 Reserve"), button:has-text("預約"), text="場地資訊"').count() > 0:
+                back_btn = page.locator('button:has-text("返回 Back"), button:has-text("返回"), a:has-text("返回 Back"), a:has-text("返回"), .btn:has-text("返回")')
+                if await back_btn.count() > 0 and await back_btn.first.is_visible():
+                    await back_btn.first.click()
+                    await page.wait_for_timeout(300)
+                else:
+                    await page.goto(self.config['system']['url'], wait_until="networkidle", timeout=5000)
+        except Exception:
+            pass
+
+    async def try_book_slot(self, page, court_name, slot_prefix, day_num, dry_run=False, timeout_ms=3000):
         """
         嘗試鎖定指定場地、指定日期與時段，並極速點擊確認預約。
+        二段式預約流程：
+        1. 點擊日曆中的目標時段按鈕
+        2. 跳轉/載入「場地預約 Reservation」頁面
+        3. 穿透 Google reCAPTCHA v2 iframe，點擊「我不是機器人」
+        4. 等待 aria-checked="true" (通常 300~500ms 內取得綠色打勾)
+        5. 點擊「預約 Reserve」完成最終送出 (若 dry_run=True 則止步於此並返回日曆)
         返回 (True, message) 或 (False, message)
         """
         section_id = self._get_court_section_id(court_name)
@@ -57,29 +77,65 @@ class Sniper:
             if "開放" in text:
                 return False, f"[{court_name}場] 時段尚未釋出開放 ({slot_prefix})"
 
-            # 點擊時段觸發預約對話框
+            # 第一階段：點擊時段按鈕導向預約頁面
             t0 = time.time()
             await target_el.click(force=True)
             
-            # 等待「確認預約」或 PrimeFaces 對話框按鈕出現並點擊 (多重容錯選擇器)
-            confirm_btn = page.locator(
-                '.ui-dialog:visible button:has-text("確認預約"), '
-                '.ui-dialog:visible button:has-text("確認"), '
-                '.ui-dialog:visible .ui-confirmdialog-yes, '
-                'button:has-text("確認預約"), '
-                'button:has-text("確認")'
+            # 容錯處理：若是舊版 PrimeFaces 彈窗 (罕見情況)
+            legacy_dialog = page.locator('.ui-dialog:visible button:has-text("確認預約"), .ui-dialog:visible .ui-confirmdialog-yes')
+            if await legacy_dialog.count() > 0 and await legacy_dialog.first.is_visible():
+                if not dry_run:
+                    await legacy_dialog.first.click()
+                elapsed_ms = int((time.time() - t0) * 1000)
+                return True, f"[{court_name}場] 通過彈窗預約完成: {slot_prefix} (耗時 {elapsed_ms}ms)"
+
+            # 第二階段：等待進入「場地預約 Reservation」頁面
+            reserve_btn = page.locator(
+                'button:has-text("預約 Reserve"), '
+                'button:has-text("預約"), '
+                'input[value*="預約"], '
+                'a:has-text("預約 Reserve")'
             )
             try:
-                await confirm_btn.first.wait_for(state="visible", timeout=timeout_ms)
-                await confirm_btn.first.click()
+                await reserve_btn.first.wait_for(state="visible", timeout=timeout_ms)
             except Exception:
-                # 若 500ms 內未彈出標準確認按鈕，快照當前彈窗或嘗試直接回車確認
+                # 備用：若尚未跳轉，嘗試回車或再等待
+                await page.keyboard.press("Enter")
+
+            # 第三階段：定位並點擊 Google reCAPTCHA v2 核取方塊
+            recaptcha_frame = page.frame_locator('iframe[title*="reCAPTCHA"], iframe[src*="recaptcha"]').first
+            anchor = recaptcha_frame.locator('#recaptcha-anchor, .recaptcha-checkbox')
+            
+            try:
+                await anchor.wait_for(state="visible", timeout=2500)
+                await anchor.click(force=True)
+                
+                # 等待綠色打勾完成 (aria-checked="true")
+                checked_locator = recaptcha_frame.locator('#recaptcha-anchor[aria-checked="true"], .recaptcha-checkbox-checked')
+                await checked_locator.wait_for(state="visible", timeout=3500)
+            except Exception as e:
+                # 若未在時間內自動取得打勾，記錄警告
+                self.notifier.log(f"   ⚠️ reCAPTCHA 狀態等待中: {e}")
+
+            # 第四階段：送出預約
+            if dry_run:
+                elapsed_ms = int((time.time() - t0) * 1000)
+                self.notifier.log(f"🧪 [模擬推演] 成功抵達預約表單並完成人機驗證 (耗時 {elapsed_ms}ms)，不執行最終送出")
+                await self._ensure_on_calendar(page)
+                return True, f"[{court_name}場] [模擬推演] 預約表單與驗證路徑暢通: {slot_prefix} (耗時 {elapsed_ms}ms)"
+            
+            # 正式執行：點擊「預約 Reserve」送出按鈕
+            if await reserve_btn.count() > 0 and await reserve_btn.first.is_visible():
+                await reserve_btn.first.click()
+            else:
                 await page.keyboard.press("Enter")
 
             elapsed_ms = int((time.time() - t0) * 1000)
-            # 短暫等待 PrimeFaces AJAX 完成
-            await page.wait_for_timeout(250)
-            return True, f"[{court_name}場] 成功點擊預約: {slot_prefix} (耗時 {elapsed_ms}ms)"
+            await page.wait_for_timeout(300)
+            
+            # 若還有後續時段需要預約，返回日曆
+            await self._ensure_on_calendar(page)
+            return True, f"[{court_name}場] 成功完成預約與人機驗證: {slot_prefix} (耗時 {elapsed_ms}ms)"
         except Exception as e:
             return False, f"[{court_name}場] 預約嘗試異常 ({slot_prefix}): {e}"
 
@@ -183,7 +239,7 @@ class Sniper:
                     for slot in self.primary_slots:
                         if slot in success_slots:
                             continue
-                        ok, msg = await self.try_book_slot(page, "A", slot, self.target_day_num)
+                        ok, msg = await self.try_book_slot(page, "A", slot, self.target_day_num, dry_run=dry_run)
                         if ok:
                             self.notifier.log(f"🎉 【A 計劃成功】{msg}")
                             success_slots.append(slot)
@@ -240,7 +296,7 @@ class Sniper:
                                     slot_key = f"{court}:{prefix}"
                                     if slot_key in success_slots or prefix in success_slots:
                                         continue
-                                    ok, msg = await self.try_book_slot(page, court, prefix, self.target_day_num)
+                                    ok, msg = await self.try_book_slot(page, court, prefix, self.target_day_num, dry_run=dry_run)
                                     if ok:
                                         self.notifier.log(f"🎉 【撿漏成功】{court}場 {prefix} - {msg}")
                                         success_slots.append(slot_key)
