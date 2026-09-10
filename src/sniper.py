@@ -204,6 +204,13 @@ class Sniper:
                 self.notifier.log(f"🌐 正在載入預約系統: {self.config['system']['url']}")
                 await page.goto(self.config['system']['url'], wait_until="networkidle")
 
+                # 關鍵檢查：驗證是否真正處於登入狀態
+                page_text = await page.inner_text('body')
+                if not ("登出" in page_text or "Log out" in page_text or "Logout" in page_text):
+                    self.notifier.log("❌ 致命錯誤：預約系統處於未登入（訪客）狀態！時段將顯示為不可點擊的 div，無法預約！請先執行 save_state.py 登入。")
+                    return False
+                self.notifier.log("✅ 預約系統登入狀態驗證成功 (已確認具備登出權限)！")
+
                 # 選擇網球場
                 self.notifier.log("🎾 預選「網球場 / Tennis court」...")
                 await page.locator('label:has-text("網球場")').click()
