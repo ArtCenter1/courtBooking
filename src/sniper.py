@@ -120,6 +120,10 @@ class Sniper:
             # 第四階段：送出預約
             if dry_run:
                 elapsed_ms = int((time.time() - t0) * 1000)
+                # 📸 在表單頁面進行人機驗證打勾結果截圖存證！
+                recaptcha_img = os.path.join(self.screenshot_dir, f"snipe_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+                await page.screenshot(path=recaptcha_img)
+                self.notifier.log(f"📸 人機驗證打勾截圖已存至: {recaptcha_img}")
                 self.notifier.log(f"🧪 [模擬推演] 成功抵達預約表單並完成人機驗證 (耗時 {elapsed_ms}ms)，不執行最終送出")
                 await self._ensure_on_calendar(page)
                 return True, f"[{court_name}場] [模擬推演] 預約表單與驗證路徑暢通: {slot_prefix} (耗時 {elapsed_ms}ms)"
@@ -186,9 +190,13 @@ class Sniper:
                 await page.locator('body').click(position={"x": 10, "y": 10})
                 await page.wait_for_timeout(500)
 
-                # 預選網球場 A 標籤
+                # 預選網球場標籤 (依使用者 court_order 第一順位)
+                first_court = self.court_order[0] if self.court_order else "A"
                 tab_links = page.locator('.r-tab__link')
-                await tab_links.first.click(force=True)
+                if first_court.upper() == "B":
+                    await tab_links.nth(1).click(force=True)
+                else:
+                    await tab_links.first.click(force=True)
                 await page.wait_for_timeout(500)
 
                 # 3. 計算 00:00:00 目標時間
@@ -235,20 +243,36 @@ class Sniper:
                     await search_btn.click()
                     await page.wait_for_timeout(refresh_interval_ms)
 
-                    # 第一優先：網球場 A 的首選時段 (17:00, 18:00)
-                    for slot in self.primary_slots:
-                        if slot in success_slots:
-                            continue
-                        ok, msg = await self.try_book_slot(page, "A", slot, self.target_day_num, dry_run=dry_run)
-                        if ok:
-                            self.notifier.log(f"🎉 【A 計劃成功】{msg}")
-                            success_slots.append(slot)
+                    # 第一優先：依使用者設定的 court_order 順序嘗試預約首選時段
+                    for court in self.court_order:
+                        if len(success_slots) >= len(self.primary_slots):
+                            break
+                        # 切換至對應場地標籤
+                        if court.upper() == "B":
+                            await tab_links.nth(1).click(force=True)
+                            await page.wait_for_timeout(150)
                         else:
-                            self.notifier.log(f"   [A場] {msg}")
+                            await tab_links.first.click(force=True)
+                            await page.wait_for_timeout(150)
 
-                    # 若已全數預約成功
-                    if len(success_slots) == len(self.primary_slots):
-                        self.notifier.log(f"🏆 【大獲全勝】首選時段全數預約成功！時段: {success_slots}")
+                        for slot in self.primary_slots:
+                            if slot in success_slots:
+                                continue
+                            ok, msg = await self.try_book_slot(page, court, slot, self.target_day_num, dry_run=dry_run)
+                            if ok:
+                                self.notifier.log(f"🎉 【{court} 計劃成功】{msg}")
+                                success_slots.append(f"{court}:{slot}")
+                                if dry_run:
+                                    break
+                            else:
+                                self.notifier.log(f"   [{court}場] {msg}")
+
+                        if dry_run and success_slots:
+                            break
+
+                    # 若已全數預約成功或推演已命中
+                    if len(success_slots) == len(self.primary_slots) or (dry_run and success_slots):
+                        self.notifier.log(f"🏆 【大獲全勝】目標時段預約/推演完成！時段: {success_slots}")
                         break
 
                     # 若前幾輪首選時段 (17:00, 18:00) 未全數獲取，啟動 14:00~17:00 零星時段撿漏
@@ -309,10 +333,11 @@ class Sniper:
                     if len(success_slots) >= 2:
                         break
 
-                # 4. 截圖存證
-                res_img = os.path.join(self.screenshot_dir, f"snipe_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
-                await page.screenshot(path=res_img)
-                self.notifier.log(f"📸 搶票結果截圖: {res_img}")
+                # 4. 截圖存證 (若為 dry_run 且已在表單頁截圖存證，則保留該驗證畫面；正式搶票則截取最終結果)
+                if not (dry_run and success_slots):
+                    res_img = os.path.join(self.screenshot_dir, f"snipe_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+                    await page.screenshot(path=res_img)
+                    self.notifier.log(f"📸 搶票結果截圖: {res_img}")
 
                 if success_slots:
                     self.notifier.log(f"✅ 搶票任務完成！預約時段清單: {success_slots}")

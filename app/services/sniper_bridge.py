@@ -111,6 +111,11 @@ class SniperBridge:
             }
         }
         
+        import importlib
+        import src.sniper
+        importlib.reload(src.sniper)
+        from src.sniper import Sniper
+
         auth_mgr = AuthManager(config)
         sniper = Sniper(config, auth_mgr, notifier)
         
