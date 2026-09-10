@@ -322,7 +322,7 @@ class Sniper:
                                     const res = [];
                                     const sec = document.querySelector(selector);
                                     if (sec) {{
-                                        sec.querySelectorAll('.timeline__identity').forEach(el => {{
+                                        sec.querySelectorAll('.timeline__identity, .timeline__rez-link').forEach(el => {{
                                             const title = el.getAttribute('title') || '';
                                             const txt = el.innerText || '';
                                             if (!txt.includes('已預約') && !txt.includes('開放') && title.includes('~')) {{
