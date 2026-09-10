@@ -25,6 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const strategySectionCard = document.getElementById('strategy-section-card');
   const strategyQueueList = document.getElementById('strategy-queue-list');
   const armStrategyBtn = document.getElementById('arm-strategy-btn');
+  const testStrategyBtn = document.getElementById('test-strategy-btn');
 
   // 摺疊面板切換
   const accordionHeader = document.getElementById('accordion-header');
@@ -407,37 +408,43 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // 點擊「🎯 制定腳本並讓程式進入待命」
+  function buildStrategyPayload() {
+    if (state.selectedStrategy.length === 0) {
+      alert('請先在空位地圖中點擊選擇至少一個志願時段！');
+      return null;
+    }
+
+    // 拿第一志願作為 main target
+    const primaryTarget = state.selectedStrategy[0];
+    const primarySlots = Array.from(new Set(state.selectedStrategy.map(s => s.startTime)));
+    const courtOrder = Array.from(new Set(state.selectedStrategy.map(s => s.court)));
+    if (courtOrder.length === 1) {
+      courtOrder.push(courtOrder[0] === 'A' ? 'B' : 'A');
+    }
+
+    return {
+      target_date: primaryTarget.headerText,
+      target_day_num: primaryTarget.dayNum,
+      primary_slots: primarySlots,
+      court_order: courtOrder,
+      enable_fallback: document.getElementById('fallback-check').checked,
+      fallback_min_hour: 14,
+      fallback_max_hour: 17,
+      refresh_attempts: parseInt(document.getElementById('refresh-attempts-input').value) || 40,
+      refresh_interval_ms: parseInt(document.getElementById('refresh-interval-input').value) || 300,
+      telegram_bot_token: document.getElementById('telegram-token-input').value || null,
+      telegram_chat_id: document.getElementById('telegram-chatid-input').value || null
+    };
+  }
+
+  // 1. 制定腳本並進入待命按鈕 (正式執行)
   if (armStrategyBtn) {
     armStrategyBtn.addEventListener('click', async () => {
-      if (state.selectedStrategy.length === 0) {
-        alert('請先在空位地圖中點擊選擇至少一個志願時段！');
-        return;
-      }
+      const payload = buildStrategyPayload();
+      if (!payload) return;
 
       armStrategyBtn.disabled = true;
       armStrategyBtn.innerText = '制定腳本中...';
-
-      // 拿第一志願作為 main target
-      const primaryTarget = state.selectedStrategy[0];
-      const primarySlots = Array.from(new Set(state.selectedStrategy.map(s => s.startTime)));
-      const courtOrder = Array.from(new Set(state.selectedStrategy.map(s => s.court)));
-      if (courtOrder.length === 1) {
-        courtOrder.push(courtOrder[0] === 'A' ? 'B' : 'A');
-      }
-
-      const payload = {
-        target_date: primaryTarget.headerText,
-        target_day_num: primaryTarget.dayNum,
-        primary_slots: primarySlots,
-        court_order: courtOrder,
-        enable_fallback: document.getElementById('fallback-check').checked,
-        fallback_min_hour: 14,
-        fallback_max_hour: 17,
-        refresh_attempts: parseInt(document.getElementById('refresh-attempts-input').value) || 40,
-        refresh_interval_ms: parseInt(document.getElementById('refresh-interval-input').value) || 300,
-        telegram_bot_token: document.getElementById('telegram-token-input').value || null,
-        telegram_chat_id: document.getElementById('telegram-chatid-input').value || null
-      };
 
       try {
         await API.createTask(payload);
@@ -447,7 +454,30 @@ document.addEventListener('DOMContentLoaded', () => {
         alert('待命失敗: ' + err.message);
       } finally {
         armStrategyBtn.disabled = false;
-        armStrategyBtn.innerText = '🎯 制定腳本並讓程式進入待命';
+        armStrategyBtn.innerText = '🎯 制定腳本並進入待命';
+      }
+    });
+  }
+
+  // 2. 模擬測試按鈕 (Dry-Run 推演，絕不送出訂單)
+  if (testStrategyBtn) {
+    testStrategyBtn.addEventListener('click', async () => {
+      const payload = buildStrategyPayload();
+      if (!payload) return;
+
+      testStrategyBtn.disabled = true;
+      testStrategyBtn.innerText = '🧪 啟動推演中...';
+
+      try {
+        // 建立模擬任務並即刻觸發 dry-run
+        const task = await API.createTask(payload);
+        await loadTasks();
+        await window.triggerDryRun(task.id, 3);
+      } catch (err) {
+        alert('啟動推演失敗: ' + err.message);
+      } finally {
+        testStrategyBtn.disabled = false;
+        testStrategyBtn.innerText = '🧪 模擬測試 (Dry-Run)';
       }
     });
   }
@@ -523,13 +553,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  window.triggerDryRun = async (id) => {
+  window.triggerDryRun = async (id, seconds = 3) => {
     dryRunModal.classList.add('open');
     const logBox = document.getElementById('dry-run-log');
-    logBox.innerText = '⏳ 正在啟動背景 Chromium 模擬推演... 請稍候 5~10 秒...';
+    const imgBox = document.getElementById('dry-run-img-box');
+    const img = document.getElementById('dry-run-img');
+    
+    if (imgBox) imgBox.style.display = 'none';
+    logBox.innerText = `⏳ 正在啟動背景 Chromium 模擬推演 (放票倒數 ${seconds} 秒)...\n• 測試第一階段：時段點擊與表單導航\n• 測試第二階段：穿透 Google reCAPTCHA v2「我不是機器人」核取方塊\n• 安全承諾：僅推演至人機驗證打勾，絕不送出訂單！\n\n請稍候約 8~12 秒...`;
+    
     try {
-      const res = await API.runDryRun(id, 5);
-      logBox.innerText = `✅ ${res.message}\n截圖存證檔: ${res.screenshot || '無'}`;
+      const res = await API.runDryRun(id, seconds);
+      logBox.innerText = `🎉 ${res.message}\n狀態: ${res.success ? '✅ 成功通過' : '⚠️ 演練結束'}\n截圖檔: ${res.screenshot || '無'}\n\n• 第二階段 reCAPTCHA 驗證機制已執行。\n• 未按下「預約 Reserve」按鈕，無任何真實扣款或訂場。`;
+      if (res.screenshot && imgBox && img) {
+        img.src = `/static/screenshots/${res.screenshot}?t=${Date.now()}`;
+        imgBox.style.display = 'block';
+      }
+      await loadTasks();
     } catch (err) {
       logBox.innerText = `❌ 推演失敗: ${err.message}`;
     }

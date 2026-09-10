@@ -105,9 +105,14 @@
             </div>
           </div>
 
-          <button id="arm-strategy-btn" class="btn btn-primary btn-block" style="background: linear-gradient(135deg, #8b5cf6, #3b82f6); font-size: 1.05rem; padding: 0.85rem; margin-top: 1rem;">
-            🎯 制定腳本並讓程式進入待命
-          </button>
+          <div style="display: flex; gap: 0.75rem; margin-top: 1rem;">
+            <button id="arm-strategy-btn" class="btn btn-primary" style="flex: 1; background: linear-gradient(135deg, #8b5cf6, #3b82f6); font-size: 1.05rem; padding: 0.85rem;" title="儲存排程任務並在放票前自動待命">
+              🎯 制定腳本並進入待命
+            </button>
+            <button id="test-strategy-btn" class="btn btn-outline" style="background: rgba(16, 185, 129, 0.12); border-color: #10b981; color: #34d399; font-weight: 600; padding: 0 1.25rem; font-size: 0.95rem; display: flex; align-items: center; gap: 0.4rem; cursor: pointer; white-space: nowrap;" title="以此時段進行 3 秒放票倒數、進入表單與 reCAPTCHA 人機驗證測試，絕不送出訂單">
+              🧪 模擬測試 (Dry-Run)
+            </button>
+          </div>
         </div>
       </section>
 
@@ -180,12 +185,16 @@
 
   <!-- 模擬推演回饋彈窗 -->
   <div id="dry-run-modal" class="modal-overlay">
-    <div class="modal-box">
+    <div class="modal-box" style="max-width: 560px;">
       <div class="card-header">
         <h3 class="card-title">🧪 模擬推演 (Dry-Run) 結果</h3>
         <button class="btn btn-outline btn-sm" onclick="closeDryRunModal()">✕</button>
       </div>
-      <pre id="dry-run-log" style="background:rgba(0,0,0,0.5); padding:1rem; border-radius:var(--radius-sm); font-size:0.85rem; color:#60a5fa; white-space:pre-wrap; max-height:240px; overflow-y:auto;"></pre>
+      <pre id="dry-run-log" style="background:rgba(0,0,0,0.5); padding:1rem; border-radius:var(--radius-sm); font-size:0.85rem; color:#60a5fa; white-space:pre-wrap; max-height:220px; overflow-y:auto;"></pre>
+      <div id="dry-run-img-box" style="display:none; margin-top:0.75rem; text-align:center;">
+        <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:0.35rem;">📸 推演畫面即時存證：</div>
+        <img id="dry-run-img" src="" alt="推演截圖" style="max-width:100%; border-radius:var(--radius-sm); border:1px solid rgba(255,255,255,0.1); max-height: 260px; object-fit: contain;">
+      </div>
       <button class="btn btn-primary btn-block" style="margin-top:1rem;" onclick="closeDryRunModal()">
         關閉
       </button>
