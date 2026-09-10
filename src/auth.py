@@ -37,6 +37,7 @@ class AuthManager:
             browser = await p.chromium.launch(headless=headless)
             context = await browser.new_context(
                 storage_state=self.state_file,
+                ignore_https_errors=True,
                 locale='zh-TW'
             )
             page = await context.new_page()
@@ -50,17 +51,21 @@ class AuthManager:
                     await browser.close()
                     return False, f"Session 已過期，頁面重定向至登入頁: {current_url}"
 
-                # 檢查網球場選單或關鍵元素是否存在
+                # 關鍵驗證：檢查是否真正處於登入狀態 (檢查是否有「登出」或「登入 / 註冊」)
+                page_text = await page.inner_text('body')
+                if "登出" in page_text or "Log out" in page_text or "Logout" in page_text:
+                    await browser.close()
+                    return True, "✅ Session 有效，確認處於登入狀態 (已識別登出按鈕)！"
+                
+                if "登入" in page_text or "Log in" in page_text:
+                    await browser.close()
+                    return False, "❌ Session 已過期 (目前為未登入訪客狀態，點擊時段將無反應)！請重新登入以更新 state.json。"
+
+                # 備用檢查
                 tennis_opt = page.locator('label:has-text("網球場")')
                 if await tennis_opt.count() > 0:
                     await browser.close()
-                    return True, "✅ Session 有效，成功識別預約系統元素！"
-                
-                # 若找不到網球場文字，再次確認是否有預約日曆表格
-                calendar_items = page.locator('.calendar__day-item')
-                if await calendar_items.count() > 0:
-                    await browser.close()
-                    return True, "✅ Session 有效，成功載入日曆表格！"
+                    return False, "⚠️ 雖可載入日曆頁面，但未偵測到登入身分，點擊預約時段將無效！請重新登入。"
 
                 await browser.close()
                 return False, f"無法識別預約頁面元件 (當前 URL: {current_url})"

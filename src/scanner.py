@@ -22,7 +22,8 @@ class CalendarScanner:
         # 準備瀏覽器 Context 參數
         context_kwargs = {
             'viewport': {'width': 1280, 'height': 800},
-            'locale': 'zh-TW'
+            'locale': 'zh-TW',
+            'ignore_https_errors': True
         }
         if state_file and __import__('os').path.exists(state_file):
             context_kwargs['storage_state'] = state_file
@@ -142,7 +143,8 @@ class CalendarScanner:
         
         context_kwargs = {
             'viewport': {'width': 1280, 'height': 800},
-            'locale': 'zh-TW'
+            'locale': 'zh-TW',
+            'ignore_https_errors': True
         }
         if state_file and __import__('os').path.exists(state_file):
             context_kwargs['storage_state'] = state_file

@@ -29,11 +29,11 @@ class Sniper:
         """確保頁面處於日曆表格，若在預約表單頁則點擊返回"""
         try:
             # 檢查是否在「場地預約 Reservation」表單頁
-            if await page.locator('button:has-text("預約 Reserve"), button:has-text("預約"), text="場地資訊"').count() > 0:
+            if await page.locator('button:has-text("預約 Reserve"), button:has-text("預約"), :has-text("場地資訊")').count() > 0:
                 back_btn = page.locator('button:has-text("返回 Back"), button:has-text("返回"), a:has-text("返回 Back"), a:has-text("返回"), .btn:has-text("返回")')
                 if await back_btn.count() > 0 and await back_btn.first.is_visible():
                     await back_btn.first.click()
-                    await page.wait_for_timeout(300)
+                    await page.wait_for_timeout(500)
                 else:
                     await page.goto(self.config['system']['url'], wait_until="networkidle", timeout=5000)
         except Exception:
@@ -52,21 +52,33 @@ class Sniper:
         """
         section_id = self._get_court_section_id(court_name)
         try:
-            # 精準定位：指定場地 section -> 指定日期 block -> 指定時段 (以 slot_prefix~ 比對開頭時段，避免混淆)
+            # 支援中研院縮寫格式 (如 "17:00" -> "17~18") 與標題/aria-label
+            try:
+                h = int(slot_prefix.split(':')[0])
+                short_text = f"{h:02d}~{h+1:02d}"
+            except Exception:
+                short_text = slot_prefix
+
+            # 精準定位：指定場地 section -> 指定日期 block -> 指定時段 (優先匹配時段文字、title~、aria-label~)
+            # 注意：title 必須帶有 ~ (例如 17:00~)，否則 16:00~17:00 會因結尾包含 17:00 而被誤選！
             slot_locator = page.locator(
-                f'{section_id} .calendar__day-item:has(.calendar__day-text:has-text("{day_num}")) .timeline__identity[title*="{slot_prefix}~"], '
-                f'{section_id} .calendar__day-item:has(.calendar__day-text:has-text("{day_num}")) .timeline__identity[title*="{slot_prefix} ~"]'
+                f'{section_id} .calendar__day-item:has(.calendar__day-text:has-text("{day_num}")) a.timeline__rez-link:has-text("{short_text}"), '
+                f'{section_id} .calendar__day-item:has(.calendar__day-text:has-text("{day_num}")) .timeline__identity:has-text("{short_text}"), '
+                f'{section_id} .calendar__day-item:has(.calendar__day-text:has-text("{day_num}")) :is(.timeline__rez-link, .timeline__identity)[title*="{slot_prefix}~"], '
+                f'{section_id} .calendar__day-item:has(.calendar__day-text:has-text("{day_num}")) :is(.timeline__rez-link, .timeline__identity)[title*="{slot_prefix} ~"], '
+                f'{section_id} .calendar__day-item:has(.calendar__day-text:has-text("{day_num}")) :is(.timeline__rez-link, .timeline__identity)[aria-label*="{slot_prefix}~"]'
             )
             
             if await slot_locator.count() == 0:
                 # 備用容錯定位
                 slot_locator = page.locator(
-                    f'{section_id} .timeline__identity[title*="{slot_prefix}~"], '
-                    f'{section_id} .timeline__identity[title*="{slot_prefix} ~"]'
+                    f'{section_id} a.timeline__rez-link:has-text("{short_text}"), '
+                    f'{section_id} .timeline__identity:has-text("{short_text}"), '
+                    f'{section_id} :is(.timeline__rez-link, .timeline__identity)[title*="{slot_prefix}~"]'
                 )
 
             if await slot_locator.count() == 0:
-                return False, f"[{court_name}場] 未找到時段: {slot_prefix}"
+                return False, f"[{court_name}場] 未找到時段: {slot_prefix} (比對縮寫 {short_text})"
 
             target_el = slot_locator.first
             text = (await target_el.inner_text()).strip()
@@ -99,34 +111,39 @@ class Sniper:
             try:
                 await reserve_btn.first.wait_for(state="visible", timeout=timeout_ms)
             except Exception:
-                # 備用：若尚未跳轉，嘗試回車或再等待
-                await page.keyboard.press("Enter")
+                return False, f"[{court_name}場] 點擊時段未進入預約頁面: {slot_prefix}"
 
             # 第三階段：定位並點擊 Google reCAPTCHA v2 核取方塊
             recaptcha_frame = page.frame_locator('iframe[title*="reCAPTCHA"], iframe[src*="recaptcha"]').first
             anchor = recaptcha_frame.locator('#recaptcha-anchor, .recaptcha-checkbox')
             
+            captcha_ok = False
             try:
-                await anchor.wait_for(state="visible", timeout=2500)
+                await anchor.wait_for(state="visible", timeout=3000)
                 await anchor.click(force=True)
                 
                 # 等待綠色打勾完成 (aria-checked="true")
                 checked_locator = recaptcha_frame.locator('#recaptcha-anchor[aria-checked="true"], .recaptcha-checkbox-checked')
                 await checked_locator.wait_for(state="visible", timeout=3500)
+                captcha_ok = True
             except Exception as e:
-                # 若未在時間內自動取得打勾，記錄警告
-                self.notifier.log(f"   ⚠️ reCAPTCHA 狀態等待中: {e}")
+                self.notifier.log(f"   ⚠️ reCAPTCHA 等待中或出現圖片挑戰: {e}")
 
             # 第四階段：送出預約
             if dry_run:
                 elapsed_ms = int((time.time() - t0) * 1000)
-                # 📸 在表單頁面進行人機驗證打勾結果截圖存證！
+                # 📸 在表單頁面進行截圖存證！
                 recaptcha_img = os.path.join(self.screenshot_dir, f"snipe_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
                 await page.screenshot(path=recaptcha_img)
-                self.notifier.log(f"📸 人機驗證打勾截圖已存至: {recaptcha_img}")
-                self.notifier.log(f"🧪 [模擬推演] 成功抵達預約表單並完成人機驗證 (耗時 {elapsed_ms}ms)，不執行最終送出")
+                self.notifier.log(f"📸 預約表單截圖已存至: {recaptcha_img}")
                 await self._ensure_on_calendar(page)
-                return True, f"[{court_name}場] [模擬推演] 預約表單與驗證路徑暢通: {slot_prefix} (耗時 {elapsed_ms}ms)"
+                
+                if captcha_ok:
+                    self.notifier.log(f"🧪 [模擬推演] 成功抵達表單並完成綠勾人機驗證 (耗時 {elapsed_ms}ms)，不執行最終送出")
+                    return True, f"[{court_name}場] [模擬推演] 預約表單與綠勾驗證暢通: {slot_prefix} (耗時 {elapsed_ms}ms)"
+                else:
+                    self.notifier.log(f"🧪 [模擬推演] 成功抵達預約表單，但需通過人機驗證 (耗時 {elapsed_ms}ms)")
+                    return True, f"[{court_name}場] [模擬推演] 成功進入預約表單 (人機驗證待確認): {slot_prefix}"
             
             # 正式執行：點擊「預約 Reserve」送出按鈕
             if await reserve_btn.count() > 0 and await reserve_btn.first.is_visible():
@@ -149,7 +166,7 @@ class Sniper:
         """
         self.notifier.log("==========================================")
         self.notifier.log(f"🎯 啟動搶票核心 | 目標日期: {self.target_date} (日: {self.target_day_num})")
-        self.notifier.log(f"📋 首選目標: 網球場 A {self.primary_slots}")
+        self.notifier.log(f"📋 首選目標: 網球場 {','.join(self.court_order)} {self.primary_slots}")
         self.notifier.log(f"📋 備選目標: {self.min_hour}:00~{self.max_hour}:00 零星釋出時段 (網球場 A/B)")
         self.notifier.log("==========================================")
 
@@ -164,12 +181,20 @@ class Sniper:
 
         from playwright.async_api import async_playwright
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=False)
+            browser = await p.chromium.launch(
+                headless=False,
+                args=[
+                    '--disable-blink-features=AutomationControlled',
+                    '--start-maximized'
+                ]
+            )
             context = await browser.new_context(
                 viewport={'width': 1366, 'height': 850},
                 locale='zh-TW',
+                ignore_https_errors=True,
                 storage_state=state_file
             )
+            await context.add_init_script("Object.defineProperty(navigator, 'webdriver', { get: () => undefined });")
             page = await context.new_page()
             # 自動處理任何原生 window.alert / window.confirm 彈窗
             page.on("dialog", lambda dialog: asyncio.create_task(dialog.accept()))
@@ -225,23 +250,25 @@ class Sniper:
                             last_print_sec = int_rem
                         await asyncio.sleep(0.5)
                     elif remaining > 2:
-                        print(f"🔥 倒數進入衝刺區: {remaining:.2f} 秒...", end='\r', flush=True)
+                        print(f"🔥 倒數進入衝刺區: {remaining:.2f} 秒...      ", end='\r', flush=True)
                         await asyncio.sleep(0.08)
                     else:
-                        print(f"⚡ [極限倒數] {remaining:.3f} 秒...", end='\r', flush=True)
+                        print(f"⚡ [極限倒數] {remaining:.3f} 秒...      ", end='\r', flush=True)
                         await asyncio.sleep(0.008)
 
-                self.notifier.log("\n🔔 00:00:00 放票！發動極速預約衝刺！")
+                print(" " * 60, end='\r', flush=True)  # 清除倒數暫存行
+                self.notifier.log("🔔 00:00:00 放票！發動極速預約衝刺！")
                 search_btn = page.locator('text=搜尋 Search')
 
                 success_slots = []
-                max_attempts = self.config['system'].get('refresh_attempts', 40)
+                max_attempts = 1 if dry_run else self.config['system'].get('refresh_attempts', 40)
                 refresh_interval_ms = self.config['system'].get('refresh_interval_ms', 300)
 
                 for attempt in range(1, max_attempts + 1):
                     t_start = time.time()
-                    await search_btn.click()
-                    await page.wait_for_timeout(refresh_interval_ms)
+                    if not dry_run:
+                        await search_btn.click()
+                        await page.wait_for_timeout(refresh_interval_ms)
 
                     # 第一優先：依使用者設定的 court_order 順序嘗試預約首選時段
                     for court in self.court_order:
@@ -250,10 +277,10 @@ class Sniper:
                         # 切換至對應場地標籤
                         if court.upper() == "B":
                             await tab_links.nth(1).click(force=True)
-                            await page.wait_for_timeout(150)
+                            await page.wait_for_timeout(400)
                         else:
                             await tab_links.first.click(force=True)
-                            await page.wait_for_timeout(150)
+                            await page.wait_for_timeout(300)
 
                         for slot in self.primary_slots:
                             if slot in success_slots:
