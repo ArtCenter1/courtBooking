@@ -25,7 +25,8 @@ if sys.platform == "win32":
 FLAG_FILE = Path(r"C:\Users\artce\scripts\login_done.flag")
 TARGET_PATHS = [
     Path(r"C:\Users\artce\scripts\state.json"),
-    Path(__file__).resolve().parent / "state.json"
+    Path(__file__).resolve().parent / "state.json",
+    Path(__file__).resolve().parent / "data" / "states" / "state_user_1.json"
 ]
 
 async def wait_user_enter():
@@ -125,6 +126,26 @@ async def main():
                     print(f"✅ 成功儲存登入狀態至: {pth}")
                 except Exception as e:
                     print(f"⚠️ 儲存至 {pth} 異常: {e}")
+
+            # 同步更新 SaaS 資料庫憑證狀態
+            try:
+                from sqlmodel import Session, create_engine, select
+                from app.models.credential import SinicaCredential
+                from datetime import datetime
+                db_path = Path(__file__).resolve().parent / "data" / "court_booking.db"
+                if db_path.exists():
+                    engine = create_engine(f"sqlite:///{db_path}")
+                    with Session(engine) as sess:
+                        creds = sess.exec(select(SinicaCredential)).all()
+                        for c in creds:
+                            c.is_valid = True
+                            c.last_verified_at = datetime.utcnow()
+                            sess.add(c)
+                        sess.commit()
+                    print("✅ 已同步更新資料庫中研院憑證為「有效」！")
+            except Exception:
+                pass
+
             print("\n✨ 登入憑證更新大功告成！瀏覽器將在 2 秒後關閉。")
             await asyncio.sleep(2)
         else:

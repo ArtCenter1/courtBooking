@@ -132,11 +132,11 @@ class Sniper:
             # 第四階段：送出預約
             if dry_run:
                 elapsed_ms = int((time.time() - t0) * 1000)
-                # 📸 在表單頁面進行截圖存證！
+                # 📸 在表單頁面進行截圖存證 (保留綠勾畫面供使用者檢閱)！
                 recaptcha_img = os.path.join(self.screenshot_dir, f"snipe_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
                 await page.screenshot(path=recaptcha_img)
                 self.notifier.log(f"📸 預約表單截圖已存至: {recaptcha_img}")
-                await self._ensure_on_calendar(page)
+                # 注意：Dry-Run 模式下嚴禁執行 _ensure_on_calendar(page)，必須維持在「場地預約」綠勾畫面供使用者檢視與存證！
                 
                 if captcha_ok:
                     self.notifier.log(f"🧪 [模擬推演] 成功抵達表單並完成綠勾人機驗證 (耗時 {elapsed_ms}ms)，不執行最終送出")
@@ -303,6 +303,55 @@ class Sniper:
 
                         if dry_run and success_slots:
                             break
+
+                    # 若為 dry_run 且指定日期的目標時段尚未開放/已被預約，自動尋找日曆上現存可用時段進行第二階段推演
+                    if dry_run and not success_slots:
+                        self.notifier.log(f"🧪 [模擬推演] 目標日期 {self.target_day_num} 日首選時段尚未釋出或已被預約。")
+                        self.notifier.log(f"🧪 [模擬推演] 自動在日曆尋找可用時段以驗證第二階段預約表單與 reCAPTCHA 綠勾...")
+                        
+                        found_test_slot = False
+                        for court in self.court_order:
+                            if found_test_slot:
+                                break
+                            if court.upper() == "B":
+                                await tab_links.nth(1).click(force=True)
+                                await page.wait_for_timeout(350)
+                            else:
+                                await tab_links.first.click(force=True)
+                                await page.wait_for_timeout(300)
+                                
+                            sec_id = "#js-v1" if court == "A" else "#js-v2"
+                            available_slots = await page.evaluate(f"""
+                                (selector) => {{
+                                    const results = [];
+                                    const sec = document.querySelector(selector);
+                                    if (sec) {{
+                                        sec.querySelectorAll('.calendar__day-item').forEach(day => {{
+                                            const dayEl = day.querySelector('.calendar__day-text');
+                                            const dayNum = dayEl ? dayEl.innerText.trim() : '';
+                                            day.querySelectorAll('.timeline__identity, a.timeline__rez-link').forEach(el => {{
+                                                const txt = (el.innerText || '').trim();
+                                                const title = el.getAttribute('title') || '';
+                                                if (txt && !txt.includes('已預約') && !txt.includes('開放') && !txt.includes('休館') && !txt.includes('停用') && (title.includes('~') || txt.includes('~'))) {{
+                                                    results.push({{ dayNum, txt, title }});
+                                                }}
+                                            }});
+                                        }});
+                                    }}
+                                    return results;
+                                }}
+                            """, sec_id)
+                            
+                            if available_slots:
+                                pick = available_slots[0]
+                                slot_prefix = pick['title'].split('~')[0].strip() if '~' in pick['title'] else pick['txt'].split('~')[0].strip()
+                                self.notifier.log(f"🎯 [模擬推演] 鎖定現存可預約時段進行推演: {court}場 {pick['dayNum']}日 {pick['title']} ({slot_prefix})")
+                                ok, msg = await self.try_book_slot(page, court, slot_prefix, pick['dayNum'], dry_run=True)
+                                if ok:
+                                    self.notifier.log(f"🎉 【模擬推演成功】{msg}")
+                                    success_slots.append(f"{court}:{slot_prefix}")
+                                    found_test_slot = True
+                                    break
 
                     # 若已全數預約成功或推演已命中
                     if len(success_slots) == len(self.primary_slots) or (dry_run and success_slots):

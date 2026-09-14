@@ -136,6 +136,15 @@ class SniperBridge:
             }
         }
         
+        # 自動檢查並同步根目錄最新 state.json
+        import shutil
+        root_state = settings.BASE_DIR / "state.json"
+        target_state = Path(state_path)
+        if root_state.exists():
+            if not target_state.exists() or root_state.stat().st_mtime > target_state.stat().st_mtime:
+                target_state.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy(root_state, target_state)
+
         import importlib
         import src.sniper
         importlib.reload(src.sniper)
@@ -144,13 +153,18 @@ class SniperBridge:
         auth_mgr = AuthManager(config)
         sniper = Sniper(config, auth_mgr, notifier)
         
+        t_start = time.time()
         success = await sniper.run_snipe_task(dry_run=dry_run, dry_run_seconds=dry_run_seconds)
         
-        # 尋找產生的截圖
+        # 僅尋找本次執行產生的高畫質存證截圖 (避免誤用歷史舊截圖)
         screenshot_file = None
-        screenshots = sorted(list(settings.SCREENSHOT_DIR.glob("snipe_result_*.png")), key=os.path.getmtime)
-        if screenshots:
-            screenshot_file = str(screenshots[-1].name)
+        new_screenshots = [
+            f for f in settings.SCREENSHOT_DIR.glob("snipe_result_*.png")
+            if f.stat().st_mtime >= t_start - 2
+        ]
+        if new_screenshots:
+            latest = max(new_screenshots, key=os.path.getmtime)
+            screenshot_file = str(latest.name)
             
         return {
             "success": success,

@@ -132,6 +132,6 @@ async def run_task_dry_run(
     
     return {
         "success": result["success"],
-        "message": "模擬推演執行完成！",
+        "message": "模擬推演成功！已驗證進入第二階段預約表單並通過 reCAPTCHA 綠勾人機驗證！" if result["success"] else "模擬推演未成功完成，中研院 Session 可能已過期（訪客態無法點擊時段），請執行 python save_state.py 重新登入！",
         "screenshot": result.get("screenshot")
     }

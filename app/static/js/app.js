@@ -564,7 +564,11 @@ document.addEventListener('DOMContentLoaded', () => {
     
     try {
       const res = await API.runDryRun(id, seconds);
-      logBox.innerText = `🎉 ${res.message}\n狀態: ${res.success ? '✅ 成功通過' : '⚠️ 演練結束'}\n截圖檔: ${res.screenshot || '無'}\n\n• 第二階段 reCAPTCHA 驗證機制已執行。\n• 未按下「預約 Reserve」按鈕，無任何真實扣款或訂場。`;
+      if (res.success) {
+        logBox.innerText = `🎉 ${res.message}\n狀態: ✅ 成功通過\n截圖檔: ${res.screenshot || '無'}\n\n• 第二階段 reCAPTCHA 驗證機制已順利執行 (已在預約表單完成綠勾認證)。\n• 未按下「預約 Reserve」按鈕，無任何真實扣款或訂場。`;
+      } else {
+        logBox.innerText = `⚠️ ${res.message}\n狀態: ❌ 演練未完成\n\n💡 常見原因與解決方式：\n• 中研院 Session 已過期（若處於訪客態，時段會被渲染為不可點擊的 div）。\n• 請在專案終端機執行：python save_state.py 重新登入換發 Session。`;
+      }
       if (res.screenshot && imgBox && img) {
         img.src = `/static/screenshots/${res.screenshot}?t=${Date.now()}`;
         imgBox.style.display = 'block';
