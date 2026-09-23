@@ -48,6 +48,7 @@ async def main():
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=False,
+            channel="chrome",
             args=[
                 '--start-maximized',
                 '--no-sandbox',

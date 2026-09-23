@@ -152,10 +152,11 @@ class Sniper:
                 await page.keyboard.press("Enter")
 
             elapsed_ms = int((time.time() - t0) * 1000)
-            await page.wait_for_timeout(300)
+            self.notifier.log(f"🚀 已點擊「預約 Reserve」送出按鈕 (表單處理耗時: {elapsed_ms}ms)，等待伺服器確認回應...")
             
-            # 若還有後續時段需要預約，返回日曆
-            await self._ensure_on_calendar(page)
+            # 關鍵防護：等待 2500ms 確保伺服器完成訂位交易寫入，嚴禁在請求進行中點擊「返回」導致請求被瀏覽器取消！
+            await page.wait_for_timeout(2500)
+            
             return True, f"[{court_name}場] 成功完成預約與人機驗證: {slot_prefix} (耗時 {elapsed_ms}ms)"
         except Exception as e:
             return False, f"[{court_name}場] 預約嘗試異常 ({slot_prefix}): {e}"
@@ -183,6 +184,7 @@ class Sniper:
         async with async_playwright() as p:
             browser = await p.chromium.launch(
                 headless=False,
+                channel="chrome",
                 args=[
                     '--disable-blink-features=AutomationControlled',
                     '--start-maximized'
@@ -298,6 +300,9 @@ class Sniper:
                                 success_slots.append(f"{court}:{slot}")
                                 if dry_run:
                                     break
+                                # 若還有後續時段需要預約，才返回日曆進行下一次點擊
+                                if len(success_slots) < len(self.primary_slots):
+                                    await self._ensure_on_calendar(page)
                             else:
                                 self.notifier.log(f"   [{court}場] {msg}")
 

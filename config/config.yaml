@@ -1,16 +1,16 @@
 # 中研院網球場預約系統配置檔
 
 target:
-  date: "09/05"                    # 目標日期 (MM/DD)
-  day_num: "05"                    # 日期數字 (日曆比對用)
-  primary_slots:                   # 首選目標時段 (今晚 09/02 開放 19:00)
-    - "19:00"
+  date: "09/26"                    # 目標日期 (MM/DD)
+  day_num: "26"                    # 日期數字 (日曆比對用)
+  primary_slots:                   # 首選目標時段 (今晚 09/24 00:00 開放 17:00)
+    - "17:00"
   court_order:                     # 場地優先級順序
     - "B"
     - "A"
-  fallback_time_range:             # 撿漏範圍 (14:00 <= 開始時間 < 17:00)
-    min_hour: 14
-    max_hour: 17
+  fallback_time_range:             # 撿漏範圍 (16:00 <= 開始時間 < 22:00)
+    min_hour: 16
+    max_hour: 22
 
 system:
   url: "https://gym.dga.sinica.edu.tw/reservation.html"
