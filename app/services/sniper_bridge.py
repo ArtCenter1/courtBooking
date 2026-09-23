@@ -112,6 +112,7 @@ class SniperBridge:
                 'day_num': task.target_day_num,
                 'primary_slots': task.primary_slots,
                 'court_order': task.court_order,
+                'targets': task.targets,
                 'fallback_time_range': {
                     'min_hour': task.fallback_min_hour,
                     'max_hour': task.fallback_max_hour

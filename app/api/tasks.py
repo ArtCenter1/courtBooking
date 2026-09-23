@@ -13,11 +13,16 @@ from app.services.sniper_bridge import SniperBridge
 
 router = APIRouter(prefix="/api/tasks", tags=["搶票任務管理"])
 
+class TargetItem(BaseModel):
+    court: str
+    slot: str
+
 class CreateTaskRequest(BaseModel):
     target_date: str # 例如 "09/06"
     target_day_num: str # 例如 "06"
-    primary_slots: List[str] # 例如 ["17:00", "18:00"]
+    primary_slots: Optional[List[str]] = None # 例如 ["17:00", "18:00"]
     court_order: Optional[List[str]] = ["A", "B"]
+    targets: Optional[List[TargetItem]] = None # 結構化志願序例如 [{"court": "A", "slot": "16:00"}, {"court": "B", "slot": "17:00"}]
     enable_fallback: bool = True
     fallback_min_hour: int = 14
     fallback_max_hour: int = 17
@@ -32,6 +37,7 @@ class TaskResponse(BaseModel):
     target_day_num: str
     primary_slots: List[str]
     court_order: List[str]
+    targets: Optional[List[dict]] = None
     enable_fallback: bool
     fallback_min_hour: int
     fallback_max_hour: int
@@ -53,6 +59,7 @@ def list_tasks(user: User = Depends(get_current_user), session: Session = Depend
             target_day_num=t.target_day_num,
             primary_slots=t.primary_slots,
             court_order=t.court_order,
+            targets=t.targets,
             enable_fallback=t.enable_fallback,
             fallback_min_hour=t.fallback_min_hour,
             fallback_max_hour=t.fallback_max_hour,
@@ -70,12 +77,25 @@ def create_task(req: CreateTaskRequest, user: User = Depends(get_current_user), 
     if not cred or not cred.is_valid:
         raise HTTPException(status_code=400, detail="請先至「中研院憑證設定」填寫並驗證您的帳號密碼！")
 
+    targets_json = None
+    p_slots = req.primary_slots or []
+    c_order = req.court_order or ["A", "B"]
+    if req.targets:
+        targets_json = json.dumps([{"court": t.court, "slot": t.slot} for t in req.targets])
+        if not p_slots:
+            p_slots = [t.slot for t in req.targets]
+        if not c_order:
+            c_order = list(dict.fromkeys([t.court for t in req.targets]))
+    elif p_slots and c_order:
+        targets_json = json.dumps([{"court": c, "slot": s} for c in c_order for s in p_slots])
+
     task = BookingTask(
         user_id=user.id,
         target_date=req.target_date,
         target_day_num=req.target_day_num,
-        primary_slots_json=json.dumps(req.primary_slots),
-        court_order_json=json.dumps(req.court_order),
+        primary_slots_json=json.dumps(p_slots),
+        court_order_json=json.dumps(c_order),
+        targets_json=targets_json,
         enable_fallback=req.enable_fallback,
         fallback_min_hour=req.fallback_min_hour,
         fallback_max_hour=req.fallback_max_hour,
@@ -95,6 +115,7 @@ def create_task(req: CreateTaskRequest, user: User = Depends(get_current_user), 
         target_day_num=task.target_day_num,
         primary_slots=task.primary_slots,
         court_order=task.court_order,
+        targets=task.targets,
         enable_fallback=task.enable_fallback,
         fallback_min_hour=task.fallback_min_hour,
         fallback_max_hour=task.fallback_max_hour,

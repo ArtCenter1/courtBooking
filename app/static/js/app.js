@@ -416,6 +416,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 拿第一志願作為 main target
     const primaryTarget = state.selectedStrategy[0];
+    const targets = state.selectedStrategy.map(s => ({
+      court: s.court,
+      slot: s.startTime
+    }));
     const primarySlots = Array.from(new Set(state.selectedStrategy.map(s => s.startTime)));
     const courtOrder = Array.from(new Set(state.selectedStrategy.map(s => s.court)));
     if (courtOrder.length === 1) {
@@ -425,6 +429,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return {
       target_date: primaryTarget.headerText,
       target_day_num: primaryTarget.dayNum,
+      targets: targets,
       primary_slots: primarySlots,
       court_order: courtOrder,
       enable_fallback: document.getElementById('fallback-check').checked,

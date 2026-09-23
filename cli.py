@@ -95,26 +95,118 @@ async def handle_scan(args, config):
     if not target_found:
         print(f"⚠️ 未在目前日曆視圖中找到 {day_target} 日，請確認是否需翻頁或切換視圖。")
 
-async def handle_dry_run(args, config):
+def parse_targets_arg(targets_str):
+    """解析 A:16:00,B:17:00 格式為結構化字典清單"""
+    items = []
+    for part in targets_str.split(','):
+        part = part.strip()
+        if not part:
+            continue
+        if ':' in part:
+            c, s = part.split(':', 1)
+            items.append({"court": c.strip().upper(), "slot": s.strip()})
+        else:
+            items.append({"court": "A", "slot": part.strip()})
+    return items
+
+def try_load_active_db_task():
+    """嘗試從本機資料庫自動載入待執行任務"""
+    db_path = BASE_DIR / "data" / "booking.db"
+    if not db_path.exists():
+        return None
+    try:
+        import sqlite3
+        con = sqlite3.connect(str(db_path))
+        cur = con.cursor()
+        # 檢查 bookingtask 資料表
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='bookingtask'")
+        if not cur.fetchone():
+            return None
+        cur.execute("""
+            SELECT id, target_date, target_day_num, primary_slots_json, court_order_json, targets_json 
+            FROM bookingtask 
+            WHERE status = 'pending' 
+            ORDER BY created_at DESC LIMIT 1
+        """)
+        row = cur.fetchone()
+        if row:
+            import json
+            task_id, target_date, target_day_num, p_slots, c_order, t_json = row
+            targets = []
+            if t_json:
+                targets = json.loads(t_json)
+            else:
+                c_list = json.loads(c_order) if c_order else ["A"]
+                s_list = json.loads(p_slots) if p_slots else ["17:00"]
+                targets = [{"court": c, "slot": s} for c in c_list for s in s_list]
+            return {
+                "id": task_id,
+                "target_date": target_date,
+                "target_day_num": target_day_num,
+                "targets": targets
+            }
+    except Exception:
+        pass
+    return None
+
+def apply_targets_to_config(args, config):
+    """整合 CLI 參數、DB 待命任務與設定檔，嚴格落實防呆與確認"""
+    # 1. 若指定 --active 或完全未指定目標，優先檢查 DB 待命任務
+    loaded_from_db = False
+    if getattr(args, 'active', False) or (not getattr(args, 'day', None) and not getattr(args, 'targets', None) and not getattr(args, 'slot', None)):
+        db_task = try_load_active_db_task()
+        if db_task:
+            config['target']['date'] = db_task['target_date']
+            config['target']['day_num'] = str(db_task['target_day_num']).zfill(2)
+            config['target']['targets'] = db_task['targets']
+            print("\n" + "="*56)
+            print(f"🎯 【自動載入】成功載入 Web 控制台排程待命任務 (Task #{db_task['id']})！")
+            loaded_from_db = True
+
+    # 2. 若有傳入 -t / --targets (優先級高於單一 -s/-c)
+    if getattr(args, 'targets', None):
+        parsed = parse_targets_arg(args.targets)
+        if parsed:
+            config['target']['targets'] = parsed
+
+    # 3. 日期覆蓋
     if getattr(args, 'day', None):
         config['target']['day_num'] = str(args.day).zfill(2)
         config['target']['date'] = str(args.day)
-    if getattr(args, 'court', None):
-        config['target']['court_order'] = [args.court]
-    if getattr(args, 'slot', None):
-        config['target']['primary_slots'] = [args.slot]
+
+    # 4. 單點參數覆蓋 (-s 或 -c) 警示防呆
+    if not getattr(args, 'targets', None) and (getattr(args, 'court', None) or getattr(args, 'slot', None)):
+        court = getattr(args, 'court', None) or config['target'].get('court_order', ['A'])[0]
+        slot = getattr(args, 'slot', None) or config['target'].get('primary_slots', ['17:00'])[0]
+        config['target']['targets'] = [{"court": court, "slot": slot}]
+        print("\n⚠️  【注意】您使用了單一覆蓋參數 (-c / -s)，僅會鎖定單一場地與時段！")
+        print("💡 如需搶多個時段或跨場地志願（如 志願1: A場 16:00, 志願2: B場 17:00），請使用: -t A:16:00,B:17:00\n")
+
+    # 5. 確保 config 具備 targets
+    if not config['target'].get('targets'):
+        c_list = config['target'].get('court_order', ['A', 'B'])
+        s_list = config['target'].get('primary_slots', ['17:00'])
+        config['target']['targets'] = [{"court": c, "slot": s} for c in c_list for s in s_list]
+
+    # 6. 強制出擊明細回顯 (Assertion / Echo)
+    print("=" * 56)
+    print(f"🎯 出擊目標清單確認 | 目標日期: {config['target']['day_num']} 日 ({config['target'].get('date', '')})")
+    print("=" * 56)
+    for i, t in enumerate(config['target']['targets']):
+        print(f"   [志願 {i+1}] 網球場 {t['court']} ({t['slot']})")
+    print("=" * 56 + "\n")
+
+async def handle_dry_run(args, config):
+    apply_targets_to_config(args, config)
 
     notifier = Notifier(log_file=config['system']['log_file'])
     auth = AuthManager(config)
     sniper = Sniper(config, auth, notifier)
     
     seconds = args.seconds or 3
-    print("==========================================")
-    print("🧪 啟動搶票模擬推演 (Dry-Run Simulation)")
-    print(f"🎯 目標場地: {config['target'].get('court_order')}, 日期: {config['target']['day_num']}, 時段: {config['target']['primary_slots']}")
+    print("🧪 啟動搶票模擬推演 (Dry-Run Simulation)...")
     res = await sniper.run_snipe_task(dry_run=True, dry_run_seconds=seconds)
     
-    # 擷取最新存證截圖並在專案根目錄建立即時預覽副本
     ss_dir = Path(config['system'].get('screenshot_dir', '.'))
     if ss_dir.exists():
         files = sorted(list(ss_dir.glob("snipe_result_*.png")), key=os.path.getmtime)
@@ -130,13 +222,7 @@ async def handle_dry_run(args, config):
             print("="*52 + "\n")
 
 async def handle_snipe(args, config):
-    if getattr(args, 'day', None):
-        config['target']['day_num'] = str(args.day).zfill(2)
-        config['target']['date'] = str(args.day)
-    if getattr(args, 'court', None):
-        config['target']['court_order'] = [args.court]
-    if getattr(args, 'slot', None):
-        config['target']['primary_slots'] = [args.slot]
+    apply_targets_to_config(args, config)
 
     notifier = Notifier(log_file=config['system']['log_file'])
     auth = AuthManager(config)
@@ -160,16 +246,20 @@ def main():
     
     # dry-run
     dry_p = subparsers.add_parser("dry-run", help="模擬推演 00:00 搶票流程")
-    dry_p.add_argument("-d", "--day", help="目標日期 (例如 11)")
+    dry_p.add_argument("-d", "--day", help="目標日期 (例如 26)")
+    dry_p.add_argument("-t", "--targets", help="結構化志願序清單 (例如 'A:16:00,B:17:00')")
     dry_p.add_argument("-c", "--court", choices=["A", "B"], help="場地 (A 或 B)")
     dry_p.add_argument("-s", "--slot", help="時段 (例如 17:00)")
+    dry_p.add_argument("--active", action="store_true", help="自動從 Web 資料庫載入待命任務")
     dry_p.add_argument("--seconds", type=int, default=3, help="模擬倒數秒數")
     
     # snipe
     snipe_p = subparsers.add_parser("snipe", help="正式執行 00:00 搶票任務")
-    snipe_p.add_argument("-d", "--day", help="目標日期 (例如 11)")
+    snipe_p.add_argument("-d", "--day", help="目標日期 (例如 26)")
+    snipe_p.add_argument("-t", "--targets", help="結構化志願序清單 (例如 'A:16:00,B:17:00')")
     snipe_p.add_argument("-c", "--court", choices=["A", "B"], help="場地 (A 或 B)")
     snipe_p.add_argument("-s", "--slot", help="時段 (例如 17:00)")
+    snipe_p.add_argument("--active", action="store_true", help="自動從 Web 資料庫載入待命任務")
     
     args = parser.parse_args()
     if not args.command:

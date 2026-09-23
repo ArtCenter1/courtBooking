@@ -16,8 +16,20 @@ class Sniper:
         self.notifier = notifier
         self.target_date = config['target']['date']            # "09/05"
         self.target_day_num = str(config['target']['day_num']) # "05"
-        self.primary_slots = config['target']['primary_slots'] # ["17:00", "18:00"]
-        self.court_order = config['target']['court_order']     # ["A", "B"]
+        self.primary_slots = config['target'].get('primary_slots', []) # ["17:00", "18:00"]
+        self.court_order = config['target'].get('court_order', ['A', 'B'])     # ["A", "B"]
+        
+        # 結構化志願序 targets: [{"court": "A", "slot": "16:00"}, {"court": "B", "slot": "17:00"}]
+        raw_targets = config['target'].get('targets', [])
+        if raw_targets:
+            self.targets = raw_targets
+        else:
+            self.targets = [
+                {"court": c, "slot": s}
+                for c in self.court_order
+                for s in self.primary_slots
+            ]
+            
         self.min_hour = config['target']['fallback_time_range']['min_hour']
         self.max_hour = config['target']['fallback_time_range']['max_hour']
         self.screenshot_dir = config['system'].get('screenshot_dir', r"C:\Users\artce\scripts")
@@ -167,7 +179,8 @@ class Sniper:
         """
         self.notifier.log("==========================================")
         self.notifier.log(f"🎯 啟動搶票核心 | 目標日期: {self.target_date} (日: {self.target_day_num})")
-        self.notifier.log(f"📋 首選目標: 網球場 {','.join(self.court_order)} {self.primary_slots}")
+        targets_desc = ", ".join([f"志願{i+1}: {t['court']}場 {t['slot']}" for i, t in enumerate(self.targets)])
+        self.notifier.log(f"📋 結構化志願序: {targets_desc}")
         self.notifier.log(f"📋 備選目標: {self.min_hour}:00~{self.max_hour}:00 零星釋出時段 (網球場 A/B)")
         self.notifier.log("==========================================")
 
@@ -224,8 +237,8 @@ class Sniper:
                 await page.locator('body').click(position={"x": 10, "y": 10})
                 await page.wait_for_timeout(500)
 
-                # 預選網球場標籤 (依使用者 court_order 第一順位)
-                first_court = self.court_order[0] if self.court_order else "A"
+                # 預選網球場標籤 (依使用者第一志願場地)
+                first_court = self.targets[0]['court'] if self.targets else (self.court_order[0] if self.court_order else "A")
                 tab_links = page.locator('.r-tab__link')
                 if first_court.upper() == "B":
                     await tab_links.nth(1).click(force=True)
@@ -279,35 +292,42 @@ class Sniper:
                         await search_btn.click()
                         await page.wait_for_timeout(refresh_interval_ms)
 
-                    # 第一優先：依使用者設定的 court_order 順序嘗試預約首選時段
-                    for court in self.court_order:
-                        if len(success_slots) >= len(self.primary_slots):
-                            break
-                        # 切換至對應場地標籤
-                        if court.upper() == "B":
-                            await tab_links.nth(1).click(force=True)
-                            await page.wait_for_timeout(400)
-                        else:
-                            await tab_links.first.click(force=True)
-                            await page.wait_for_timeout(300)
+                    # 第一優先：嚴格依結構化志願序 self.targets 順序嘗試預約
+                    current_tab_court = first_court.upper()
+                    for idx, target in enumerate(self.targets):
+                        court = target['court']
+                        slot = target['slot']
+                        slot_key = f"{court}:{slot}"
+                        if slot_key in success_slots or slot in success_slots:
+                            continue
 
-                        for slot in self.primary_slots:
-                            if slot in success_slots:
-                                continue
-                            ok, msg = await self.try_book_slot(page, court, slot, self.target_day_num, dry_run=dry_run)
-                            if ok:
-                                self.notifier.log(f"🎉 【{court} 計劃成功】{msg}")
-                                success_slots.append(f"{court}:{slot}")
-                                if dry_run:
-                                    break
-                                # 若還有後續時段需要預約，才返回日曆進行下一次點擊
-                                if len(success_slots) < len(self.primary_slots):
-                                    await self._ensure_on_calendar(page)
+                        # 僅在場地與當前分頁不同時才切換分頁，節省關鍵毫秒
+                        if court.upper() != current_tab_court:
+                            if court.upper() == "B":
+                                await tab_links.nth(1).click(force=True)
+                                await page.wait_for_timeout(350)
                             else:
-                                self.notifier.log(f"   [{court}場] {msg}")
+                                await tab_links.first.click(force=True)
+                                await page.wait_for_timeout(250)
+                            current_tab_court = court.upper()
 
-                        if dry_run and success_slots:
+                        ok, msg = await self.try_book_slot(page, court, slot, self.target_day_num, dry_run=dry_run)
+                        if ok:
+                            self.notifier.log(f"🎉 【志願 {idx+1} ({court}場 {slot}) 搶票成功】{msg}")
+                            success_slots.append(slot_key)
+                            if dry_run:
+                                break
+                            # 若還有後續時段需要預約，才返回日曆進行下一次點擊
+                            if len(success_slots) < len(self.targets):
+                                await self._ensure_on_calendar(page)
+                        else:
+                            self.notifier.log(f"   [志願 {idx+1}: {court}場 {slot}] {msg}")
+
+                        if len(success_slots) >= len(self.targets):
                             break
+
+                    if (len(success_slots) >= len(self.targets)) or (dry_run and success_slots):
+                        break
 
                     # 若為 dry_run 且指定日期的目標時段尚未開放/已被預約，自動尋找日曆上現存可用時段進行第二階段推演
                     if dry_run and not success_slots:

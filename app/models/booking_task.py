@@ -17,6 +17,9 @@ class BookingTask(SQLModel, table=True):
     # 場地優先順序 (例如 '["A", "B"]')
     court_order_json: str = Field(default='["A", "B"]')
     
+    # 結構化志願序 (以 JSON 陣列儲存，例如 '[{"court": "A", "slot": "16:00"}, {"court": "B", "slot": "17:00"}]')
+    targets_json: Optional[str] = Field(default=None)
+    
     # 撿漏範圍 (14:00 <= 開始時間 < 17:00)
     enable_fallback: bool = Field(default=True)
     fallback_min_hour: int = Field(default=14)
@@ -54,3 +57,12 @@ class BookingTask(SQLModel, table=True):
             return json.loads(self.court_order_json)
         except Exception:
             return ["A", "B"]
+
+    @property
+    def targets(self) -> List[dict]:
+        if self.targets_json:
+            try:
+                return json.loads(self.targets_json)
+            except Exception:
+                pass
+        return [{"court": c, "slot": s} for c in self.court_order for s in self.primary_slots]
